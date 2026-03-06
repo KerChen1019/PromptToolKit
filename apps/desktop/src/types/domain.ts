@@ -4,6 +4,7 @@ export interface Project {
   id: string;
   name: string;
   globalSuffix: string;
+  customTags: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -15,6 +16,7 @@ export interface Prompt {
   currentDraft: string;
   currentVersionId: string | null;
   starred: boolean;
+  tags: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -57,7 +59,19 @@ export interface ReferenceAsset {
   height: number | null;
   tags: string[];
   linkedPromptVersionId: string | null;
+  promptId: string | null;
   createdAt: string;
+}
+
+export interface TagEntry {
+  value: string;
+  projectIds: string[];
+}
+
+export interface TagCategory {
+  name: string;
+  dimensionKey: string | null;
+  tags: TagEntry[];
 }
 
 export interface CopyPayloadV1 {
@@ -81,6 +95,33 @@ export interface OutputAttributionResponse {
   outputId: string;
   outputPath: string;
   candidates: AttributionCandidate[];
+}
+
+export interface OutputImage {
+  id: string;
+  projectId: string;
+  sourcePath: string;
+  storedPath: string;
+  modelHint: string | null;
+  promptId: string | null;
+  promptTitle: string | null;
+  createdAt: string;
+}
+
+export interface ProjectClearSummary {
+  deletedProjectCount: number;
+  deletedPromptCount: number;
+  deletedReferenceCount: number;
+  deletedOutputCount: number;
+  removedAssetFileCount: number;
+}
+
+export interface ProjectExportResult {
+  bundlePath: string;
+  projectName: string;
+  promptCount: number;
+  referenceCount: number;
+  outputCount: number;
 }
 
 export type ProviderKind =

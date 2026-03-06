@@ -30,6 +30,35 @@ pub fn prompt_list_by_project(
 }
 
 #[tauri::command]
+pub fn prompt_update_title(
+    state: tauri::State<'_, AppState>,
+    prompt_id: String,
+    title: String,
+) -> Result<crate::models::Prompt, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    prompt_repo::update_title(&conn, &prompt_id, &title).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn prompt_delete(
+    state: tauri::State<'_, AppState>,
+    prompt_id: String,
+) -> Result<(), String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    prompt_repo::delete(&conn, &prompt_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn prompt_set_tags(
+    state: tauri::State<'_, AppState>,
+    prompt_id: String,
+    tags: Vec<String>,
+) -> Result<crate::models::Prompt, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    prompt_repo::set_tags(&conn, &prompt_id, &tags).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub fn prompt_toggle_star(
     state: tauri::State<'_, AppState>,
     prompt_id: String,

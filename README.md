@@ -1,203 +1,227 @@
 # Prompt Toolkit
 
-Open-source prompt engineering and prompt asset management for AI artists and creative teams.
+A desktop app for AI artists to write, organize, version, and reuse prompts — for any image model.
 
-Prompt Toolkit does not try to replace image models. It turns prompts from one-off input text into reusable, versioned creative assets.
-
-## What It Is
-
-Prompt Toolkit is a local-first desktop application for creating, editing, versioning, reusing, and attributing prompts.
-
-- Model-agnostic and platform-agnostic
-- Natural-language-first workflow (not rigid form-only authoring)
-- Focused on prompt quality, iteration, reuse, and traceability
-
-## Problems It Solves
-
-- Repetitive writing of style/camera/lighting fragments
-- Version chaos (`final_v3_final2` style files with no real change history)
-- Poor reuse of high-value prompt fragments and references
-- Broken attribution when results are produced outside the app
-- Slow comparison loops without stable diff and rollback workflows
-
-## Why Use It
-
-- Faster creative iteration through snippet reuse and structured prompt management
-- Higher quality edits through version history, diff, and restore
-- Better traceability through copy payload + pasteback attribution
-- Full provider freedom with user-managed AI backends
-
-## Feature Set (Current Implementation)
-
-### 1. Prompt Project Management + Prompt Generator
-
-#### 1.1 Project and Prompt Management
-
-- Project CRUD: create, list, update, delete
-- Prompt CRUD flow: create, save draft, commit version, restore version
-- Left navigation tree grouped by project
-- Prompt starring + "starred only" filter
-- Monaco-based central editor
-
-#### 1.2 Tag System (User-Defined + Canonical)
-
-- Users can define custom tags freely
-- Canonical cross-module tags are supported for consistent retrieval:
-  - `subject-action`
-  - `camera-lens`
-  - `lighting`
-  - `color-palette`
-  - `material-texture`
-  - `composition`
-  - `style-mood`
-- Snippets panel supports tag filtering and keyword search
-
-#### 1.3 Prompt Generator Logic
-
-- Step 1: free-form brief input
-- Step 2: optional dimensions (subject/action, camera/lens, lighting, color, material/texture, composition, style/mood)
-- Drag-and-drop interaction:
-  - Drag tags from the right-side tag rail (Snippets panel)
-  - Drop onto any dimension field in Prompt Generator
-  - Matching snippet contents are injected into the target dimension field
-- AI-generated final prompt output
-- `Send to Editor` writes generated text back into the main editor
-
-### 2. Image Analysis Features
-
-#### 2.1 Single-Image Reverse Engineering
-
-- Drag/drop or pick one image for analysis
-- Structured outputs per dimension (e.g. Subject/Action, Camera/Lens, Lighting, Color Palette, Material/Texture, Composition, Style/Mood)
-- Each dimension returns:
-  - `core`
-  - `detail`
-  - `confidence`
-- Results can be:
-  - inserted into the editor
-  - saved to snippets (single-dimension or batch)
-
-#### 2.2 Moodboard Multi-Image Analysis
-
-- Import multiple images (drag/drop or file picker)
-- Returns:
-  - `common style`
-  - `variations`
-- Output can be:
-  - saved as a `suffix` snippet
-  - set as project-level global suffix
-
-#### 2.3 Tag Assignment and Custom Authoring
-
-- Users can assign, edit, and extend tags
-- Reference assets support editable tags and tag-based filtering
-- Snippets support tag-based classification, search, and drag reuse
-
-#### 2.4 Related Implemented Capabilities
-
-- Prompt Rewrite:
-  - full-text or selection rewrite
-  - 3 candidates (`conservative`, `balanced`, `aggressive`)
-  - unified diff preview
-  - manual apply
-- Version control:
-  - version list
-  - diff
-  - restore
-- Copy/pasteback attribution:
-  - hidden payload on copy
-  - attribution candidates on output import
-  - explicit confirmation flow
-- AI Provider management:
-  - OpenAI-compatible / OpenAI / Anthropic / Gemini
-  - connection tests
-  - default provider
-  - run history tracking
-
-## Market Context: Character Consistency Technology Status
-
-Character consistency is still a core challenge in AI image generation. As of early 2026, model capabilities have improved, but key gaps remain.
-
-Progress already visible:
-
-- Qwen Image Edit 2511: relatively stable facial identity in single-portrait edits
-- Nano Banana (Gemini 2.5 Flash): supports up to 14 inputs and 5-person consistency
-- Midjourney `--cref`: reference-image-based character consistency
-
-Still unresolved in practice:
-
-- Fine-detail consistency (freckles, tattoos, logos) across scenes
-- Identity drift in multi-character compositions
-- Long-sequence drift (often noticeable after ~8-12 frames)
-- Significant instability under extreme pose and camera-angle shifts
-
-Why this matters for Prompt Toolkit:
-
-- The harder consistency is, the more prompt discipline matters
-- Well-maintained prompt text is still a primary control layer against drift
-- Prompt Toolkit complements model improvements by making prompt workflows systematic and repeatable
+**Local-first · Open source · Model-agnostic · No subscriptions**
 
 ---
 
-## Getting Started
+## What Is This?
+
+Prompt Toolkit is a dedicated workspace for your AI image prompts. It sits between you and whatever model you're using — Midjourney, Flux, Stable Diffusion, DALL·E, Runway, and so on. You write and manage prompts here, then copy them out when you're ready to generate.
+
+It does not generate images itself. What it does:
+
+- Saves every version of every prompt so you never lose the one that worked
+- Lets you build a library of reusable prompt fragments and drag them in anywhere
+- Attributes generated images back to the specific prompt that produced them
+- Analyzes images with AI to extract the style and technique so you can recreate it
+
+All your data lives on your own computer in a local database. No account required.
+
+---
+
+## The Problem It Solves
+
+If you generate more than a handful of images per week, you've probably felt this:
+
+- You had a prompt that produced a great result and can't find it anymore
+- You can't tell what changed between the version that worked and the one that didn't
+- You write the same lighting and camera phrases over and over for every project
+- When an image comes out exactly right, you're not sure which specific prompt text made it happen
+
+Prompt Toolkit is built to fix all of that.
+
+---
+
+## Features
+
+### Project and Prompt Management
+
+Organize prompts into projects — one per campaign, character, style, or whatever makes sense for how you work. Inside each project, create as many individual prompts as you need. Rename them inline by clicking the name. Star the ones worth pinning to the top.
+
+The main editor is Monaco (the same engine as VS Code). Your prompt is plain text — no required fields, no rigid structure.
+
+### Version Control
+
+Every time you click **Commit**, a version is saved with a timestamp. Open the **Versions** panel to see the full history. Click **Diff** on any version to see exactly what changed versus the previous one, as a unified diff. Click **Restore** to roll back the current draft to any earlier version.
+
+### Snippet Library
+
+A snippet is any prompt fragment you want to reuse — a phrase, a sentence, or a multi-line block. Each snippet has:
+- A **scope**: `prefix` (used at the start of a prompt), `suffix` (used at the end), or `free` (insert anywhere)
+- **Tags** from the shared taxonomy
+- **Full-text search** across name, content, and tags
+
+Find a snippet, click **Insert**, and it goes into the editor at the cursor position. Drag tag chips directly into the editor or into the Prompt Generator dimension fields.
+
+### Tag Taxonomy
+
+A shared tag system with built-in creative dimensions: Subject/Action, Camera/Lens, Lighting, Color Palette, Material/Texture, Composition, Style/Mood. Each category can be expanded or collapsed.
+
+You can add your own tags to any category, create entirely new custom categories, and delete custom ones. Tags can be "pinned" to a specific project so they show up first when you filter by current project. The taxonomy is global — the same tags appear consistently in Snippets, References, and the Prompt Generator.
+
+### Reference Images
+
+Import images or videos as reference assets (style references, character sheets, pose guides, mood images, etc.). For each reference you can:
+- Add and edit tags using the built-in tag set or your own
+- Link it to the current prompt so you remember which references you were working from
+- Filter the full reference list by tag or by "current prompt only"
+- Click any thumbnail to open a full-size lightbox view
+
+### Output Attribution
+
+When you generate an image and want to save it, drop it into the **Outputs** panel (or click to pick the file). The app imports a copy and runs AI analysis to find which prompt in the project most likely produced it — matching against the content of your prompt versions. It shows you ranked candidates with confidence scores and reasons. Confirm the match, and that image is permanently linked to that prompt version. You can also link outputs to prompts manually.
+
+Outputs linked to the current prompt are shown at the top of the panel. Unlinked outputs appear in a separate section with a dropdown to assign them.
+
+### Prompt Generator
+
+Open the **Prompt Generator** tool (icon in the right activity bar). Describe what you want in the brief field. Optionally fill in specific dimension fields (subject, camera, lighting, color, texture, composition, mood) for the parts you care about most. Tag chips from your library can be dragged directly into any dimension field. Click **Generate** and the AI produces a complete prompt. Send it to the editor and keep editing from there.
+
+The generator can be "bound" to a line in the editor — type in that line and the brief field syncs automatically, so you can iterate directly from within the editor.
+
+### AI Rewrite
+
+Select any text in the editor and a floating bubble appears. Submit it for a rewrite and get three candidates:
+- **Conservative** — small, targeted adjustments
+- **Balanced** — meaningful improvements while keeping your intent
+- **Aggressive** — significant rework
+
+Each candidate shows a diff of the proposed changes. Click **Apply** to replace the selected text with that version.
+
+### Image Analyzer
+
+Open the **Image Analyzer** tool. Drop an image or click to pick one. The AI analyzes it across all creative dimensions and returns structured results: Subject/Action, Camera/Lens, Lighting, Color Palette, Material/Texture, Composition, Style/Mood. Each dimension has a core description and an expanded detail view.
+
+Results can be:
+- Sent individually to the main editor
+- Saved as snippets (one dimension at a time, or all checked dimensions at once)
+
+### Moodboard Analyzer
+
+Open the **Moodboard** tool. Drop multiple images (or add them one by one). The AI looks at all of them and identifies a shared style — what they have in common aesthetically. You can edit the result before saving. Save it as a suffix snippet, or set it as the **global suffix** for the entire current project (automatically appended to every prompt in that project).
+
+### AI Provider Management
+
+Open **AI Settings** (icon in the right activity bar). Connect your own AI backends:
+
+| Provider | What it's for |
+|----------|--------------|
+| **Anthropic** | Claude models — text generation, rewrite, prompt generation |
+| **OpenAI** | GPT models — same use cases |
+| **Google Gemini** | Gemini models — text and vision |
+| **Local / Custom** | Ollama, LM Studio, or any OpenAI-compatible endpoint on your machine |
+
+For each provider you enter an API key (or base URL for local models), the app fetches the model list, and you pick a model. Test the connection before saving. Set separate defaults for **Text** tasks (rewrite, generate) and **VLM** tasks (image analysis, attribution) — these can be different providers.
+
+### Light and Dark Mode
+
+Toggle between light and dark themes using the button at the bottom of the left panel. The preference is saved and applied immediately on next launch.
+
+---
+
+## How to Use It — A Typical Workflow
+
+1. **Create a project** in the left panel for whatever you're working on
+2. **Create a prompt** inside the project and write your starting text
+3. **Commit** when you have a version worth keeping
+4. **Copy** the prompt text and paste it into your image generation tool
+5. If the result is good, **drop the image** into the Outputs panel and confirm the attribution
+6. If you want to refine, come back, **edit the prompt**, commit again, and repeat
+7. As you work, **save reusable fragments** as snippets so you can pull them into future prompts
+
+Over time you build a library of tested prompt components. The version history shows you exactly how your thinking evolved on any given prompt.
+
+---
+
+## Interface Layout
+
+```
+┌──────────────┬────────────────────────────────┬───┬──────────────┐
+│  Left Panel  │         Center Editor          │   │ Right Panel  │
+│              │                                │   │              │
+│  Projects    │  (or: Prompt Generator,        │ ← │  Versions    │
+│  Prompts     │   Image Analyzer,              │   │  Snippets    │
+│              │   Moodboard,                   │   │  References  │
+│              │   AI Settings)                 │   │  Outputs     │
+└──────────────┴────────────────────────────────┴───┴──────────────┘
+```
+
+The left panel and right panel are resizable by dragging the dividers. The right panel is opened and closed by the icon bar on the far right edge.
+
+---
+
+## Setup and Installation
 
 ### Requirements
 
-- Node.js 22 LTS
-- pnpm 10+
-- Rust stable (for Tauri desktop runtime)
-- Windows (current release target)
+- **Windows** (current release target)
+- **Node.js 22 LTS**
+- **pnpm 10+**
+- **Rust stable** — install from [rustup.rs](https://rustup.rs)
 
-### Install and Run
+### Run from source
 
 ```bash
+git clone <repo-url>
+cd PromptToolKit
+
 corepack enable
 corepack pnpm install
 corepack pnpm tauri:dev
 ```
 
-### Quick Checks
+The app opens as a native desktop window.
+
+### Build for distribution
 
 ```bash
-corepack pnpm lint
-corepack pnpm build
+corepack pnpm tauri:build
 ```
+
+### Other dev commands
+
+```bash
+pnpm dev          # frontend only (no Tauri window)
+pnpm build        # frontend build
+pnpm lint         # TypeScript type check
+```
+
+---
+
+## Common Questions
+
+**Does it work without an AI provider?**
+Yes. Project management, prompt editing, version history, snippets, references, and output linking all work without any AI configured. You only need an API key for: Prompt Generator, AI Rewrite, Image Analyzer, Moodboard Analyzer, and Output auto-attribution.
+
+**Which image models does it work with?**
+All of them. Prompt Toolkit is model-agnostic — it stores and manages text. Paste the prompt wherever you generate images.
+
+**Where is my data stored?**
+A SQLite database and an assets folder on your local machine. Nothing is sent anywhere unless you explicitly use an AI feature, and even then only the content of that specific request goes to the provider you configured.
+
+**Can I use a local model instead of paying for an API?**
+Yes. Add a "Local / Custom" provider and set the base URL of your local server (e.g. `http://localhost:11434` for Ollama). The app loads whatever models are installed.
+
+**Can I use different AI models for text vs. image analysis?**
+Yes. You set a default **Text** provider and a default **VLM** (vision-language model) provider separately. The right tool for each job.
 
 ---
 
 ## Tech Stack
 
-- Tauri 2 + Rust
-- React + TypeScript + Vite
-- Zustand + TanStack Query
-- Monaco Editor + Monaco Diff
-- SQLite (WAL)
+| Layer | Technology |
+|-------|-----------|
+| Desktop runtime | Tauri 2 + Rust |
+| Frontend | React 19 + TypeScript + Vite |
+| Editor | Monaco Editor |
+| State management | Zustand + TanStack Query |
+| Database | SQLite (WAL mode) via Drizzle ORM |
+| Styling | CSS custom properties — full light/dark theme |
 
 ---
 
-## Workspace Scripts
+## License
 
-From root `package.json`:
-
-- `pnpm dev` - run frontend dev server
-- `pnpm tauri:dev` - run desktop app in dev mode
-- `pnpm build` - frontend build
-- `pnpm tauri:build` - desktop package build
-- `pnpm lint` - TypeScript type check
-- `pnpm test` - test entrypoint (frontend test suite not fully wired yet)
-
----
-
-## Public Tauri Commands
-
-- `project.create/list/update/delete`
-- `prompt.create/listByProject/toggleStar/saveDraft/commitVersion/listVersions/restoreVersion/diffVersions`
-- `prompt.generateFromBrief/rewriteCandidates`
-- `snippet.create/list/update/delete/insertPreview`
-- `reference.import/list/tag/linkToPromptVersion`
-- `clipboard.copyWithPayload`
-- `output.pasteImportAndAutoAttribution/confirmAttribution`
-- `ai.provider.create/list/update/delete/testConnection`
-- `ai.defaultProvider.get/set`
-- `aiRun.history.list`
-- `vision.imageAnalyze/moodboardAnalyze/providerFetchModels`
+Open source. See `LICENSE` for details.

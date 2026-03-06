@@ -37,7 +37,7 @@ fn resolve_provider_and_key(
     provider_id_override: Option<&str>,
 ) -> Result<(AIProvider, String), String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
-    let provider = ai_repo::resolve_effective_provider(&conn, provider_id_override)
+    let provider = ai_repo::resolve_effective_vlm_provider(&conn, provider_id_override)
         .map_err(|e| e.to_string())?
         .ok_or_else(|| "no available AI provider; configure one in AISettings".to_string())?;
     if !provider.enabled {

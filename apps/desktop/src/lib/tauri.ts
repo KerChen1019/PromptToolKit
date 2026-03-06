@@ -8,6 +8,9 @@ import type {
   ImageDimensionResult,
   MoodboardResult,
   OutputAttributionResponse,
+  OutputImage,
+  ProjectClearSummary,
+  ProjectExportResult,
   Project,
   Prompt,
   PromptGenerateInput,
@@ -25,10 +28,16 @@ const command = {
     create: "project_create",
     list: "project_list",
     update: "project_update",
+    setCustomTags: "project_set_custom_tags",
     delete: "project_delete",
+    clearAll: "project_clear_all",
+    exportBundle: "project_export_bundle",
   },
   prompt: {
     create: "prompt_create",
+    delete: "prompt_delete",
+    updateTitle: "prompt_update_title",
+    setTags: "prompt_set_tags",
     toggleStar: "prompt_toggle_star",
     saveDraft: "prompt_save_draft",
     commitVersion: "prompt_commit_version",
@@ -51,6 +60,8 @@ const command = {
     list: "reference_list",
     tag: "reference_tag",
     linkToPromptVersion: "reference_link_to_prompt_version",
+    linkToPrompt: "reference_link_to_prompt",
+    delete: "reference_delete",
   },
   clipboard: {
     copyWithPayload: "clipboard_copy_with_payload",
@@ -58,6 +69,9 @@ const command = {
   output: {
     pasteImportAndAutoAttribution: "output_paste_import_and_auto_attribution",
     confirmAttribution: "output_confirm_attribution",
+    listByProject: "output_list_by_project",
+    linkToPrompt: "output_link_to_prompt",
+    delete: "output_delete",
   },
   ai: {
     providerCreate: "ai_provider_create",
@@ -67,7 +81,13 @@ const command = {
     providerTestConnection: "ai_provider_test_connection",
     defaultProviderGet: "ai_default_provider_get",
     defaultProviderSet: "ai_default_provider_set",
+    defaultVlmProviderGet: "ai_default_vlm_provider_get",
+    defaultVlmProviderSet: "ai_default_vlm_provider_set",
     providerFetchModels: "ai_provider_fetch_models",
+  },
+  settings: {
+    get: "app_setting_get",
+    set: "app_setting_set",
   },
   vision: {
     imageAnalyze: "image_analyze",
@@ -94,8 +114,28 @@ export async function updateProject(
   return invoke<Project>(command.project.update, { id, name, globalSuffix });
 }
 
+export async function setProjectCustomTags(id: string, tags: string[]): Promise<Project> {
+  return invoke<Project>(command.project.setCustomTags, { id, tags });
+}
+
 export async function deleteProject(id: string): Promise<void> {
   return invoke<void>(command.project.delete, { id });
+}
+
+export async function clearAllProjects(): Promise<ProjectClearSummary> {
+  return invoke<ProjectClearSummary>(command.project.clearAll);
+}
+
+export async function exportProjectBundle(
+  projectId: string,
+  destinationDir: string,
+  promptIds?: string[] | null,
+): Promise<ProjectExportResult> {
+  return invoke<ProjectExportResult>(command.project.exportBundle, {
+    projectId,
+    destinationDir,
+    promptIds: promptIds ?? null,
+  });
 }
 
 export async function createPrompt(
@@ -108,6 +148,18 @@ export async function createPrompt(
 
 export async function listPromptsByProject(projectId: string): Promise<Prompt[]> {
   return invoke<Prompt[]>(command.prompt.listByProject, { projectId });
+}
+
+export async function deletePrompt(promptId: string): Promise<void> {
+  return invoke<void>(command.prompt.delete, { promptId });
+}
+
+export async function updatePromptTitle(promptId: string, title: string): Promise<Prompt> {
+  return invoke<Prompt>(command.prompt.updateTitle, { promptId, title });
+}
+
+export async function setPromptTags(promptId: string, tags: string[]): Promise<Prompt> {
+  return invoke<Prompt>(command.prompt.setTags, { promptId, tags });
 }
 
 export async function togglePromptStar(promptId: string): Promise<Prompt> {
@@ -221,11 +273,21 @@ export async function importReference(
 export async function listReferences(
   projectId: string,
   tagFilter: string | null,
+  promptIdFilter?: string | null,
 ): Promise<ReferenceAsset[]> {
   return invoke<ReferenceAsset[]>(command.reference.list, {
     projectId,
     tagFilter,
+    promptIdFilter: promptIdFilter ?? null,
   });
+}
+
+export async function linkReferenceToPrompt(assetId: string, promptId: string | null): Promise<ReferenceAsset> {
+  return invoke<ReferenceAsset>(command.reference.linkToPrompt, { assetId, promptId });
+}
+
+export async function deleteReference(assetId: string): Promise<void> {
+  return invoke<void>(command.reference.delete, { assetId });
 }
 
 export async function tagReference(assetId: string, tags: string[]): Promise<ReferenceAsset> {
@@ -273,6 +335,21 @@ export async function confirmAttribution(
   });
 }
 
+export async function listOutputsByProject(projectId: string): Promise<OutputImage[]> {
+  return invoke<OutputImage[]>(command.output.listByProject, { projectId });
+}
+
+export async function linkOutputToPrompt(
+  outputId: string,
+  promptId: string | null,
+): Promise<OutputImage> {
+  return invoke<OutputImage>(command.output.linkToPrompt, { outputId, promptId });
+}
+
+export async function deleteOutput(outputId: string): Promise<void> {
+  return invoke<void>(command.output.delete, { outputId });
+}
+
 export async function createAIProvider(input: {
   name: string;
   kind: "openai_compatible" | "openai" | "anthropic" | "gemini";
@@ -316,6 +393,22 @@ export async function setDefaultAIProviderId(
   providerId: string | null,
 ): Promise<void> {
   return invoke<void>(command.ai.defaultProviderSet, { providerId });
+}
+
+export async function getDefaultVlmProviderId(): Promise<string | null> {
+  return invoke<string | null>(command.ai.defaultVlmProviderGet);
+}
+
+export async function setDefaultVlmProviderId(providerId: string | null): Promise<void> {
+  return invoke<void>(command.ai.defaultVlmProviderSet, { providerId });
+}
+
+export async function getAppSetting(key: string): Promise<string | null> {
+  return invoke<string | null>(command.settings.get, { key });
+}
+
+export async function setAppSetting(key: string, value: string): Promise<void> {
+  return invoke<void>(command.settings.set, { key, value });
 }
 
 export async function generatePromptFromBrief(

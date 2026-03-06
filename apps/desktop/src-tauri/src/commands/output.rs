@@ -2,7 +2,7 @@ use crate::{
     assets,
     attribution,
     clipboard,
-    models::OutputAttributionResponse,
+    models::{OutputAttributionResponse, OutputImage},
     repo::output_repo,
     state::AppState,
 };
@@ -53,4 +53,39 @@ pub fn output_confirm_attribution(
 ) -> Result<Vec<crate::models::AttributionCandidate>, String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
     output_repo::confirm_candidate(&conn, &output_id, &attribution_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn output_list_by_project(
+    state: tauri::State<'_, AppState>,
+    project_id: String,
+) -> Result<Vec<OutputImage>, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    output_repo::list_by_project(&conn, &project_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn output_link_to_prompt(
+    state: tauri::State<'_, AppState>,
+    output_id: String,
+    prompt_id: Option<String>,
+) -> Result<OutputImage, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    output_repo::link_to_prompt(&conn, &output_id, prompt_id.as_deref()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn output_delete(
+    state: tauri::State<'_, AppState>,
+    output_id: String,
+) -> Result<(), String> {
+    let stored_path = {
+        let conn = state.db.lock().map_err(|e| e.to_string())?;
+        output_repo::delete(&conn, &output_id).map_err(|e| e.to_string())?
+    };
+    let path = std::path::PathBuf::from(stored_path);
+    if path.exists() {
+        std::fs::remove_file(&path).map_err(|e| e.to_string())?;
+    }
+    Ok(())
 }

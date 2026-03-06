@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
-import { analyzeImage, createSnippet, listAIProviders } from "../../lib/tauri";
+import { analyzeImage, createSnippet, getDefaultVlmProviderId, listAIProviders } from "../../lib/tauri";
 import { canonicalTagLabel, normalizeTagForStorage } from "../../lib/tagTaxonomy";
 import { useUIStore } from "../../store/uiStore";
 import type { ImageDimensionResult } from "../../types/domain";
@@ -30,6 +30,16 @@ export function ImageAnalyzerView() {
   const [savedDimensions, setSavedDimensions] = useState<Set<string>>(new Set());
 
   const aiProvidersQuery = useQuery({ queryKey: ["aiProviders"], queryFn: listAIProviders });
+  const defaultVlmProviderQuery = useQuery({
+    queryKey: ["defaultVlmProviderId"],
+    queryFn: getDefaultVlmProviderId,
+  });
+
+  useEffect(() => {
+    if (defaultVlmProviderQuery.data && !providerOverride) {
+      setProviderOverride(defaultVlmProviderQuery.data);
+    }
+  }, [defaultVlmProviderQuery.data, providerOverride]);
 
   useEffect(() => {
     const setup = async () => {
@@ -204,7 +214,11 @@ export function ImageAnalyzerView() {
             />
           ) : (
             <div className="drop-zone-hint">
-              <div style={{ fontSize: 32, marginBottom: 8 }}>[IMG]</div>
+              <svg style={{ display: "block", margin: "0 auto 12px" }} width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2"/>
+                <circle cx="8.5" cy="8.5" r="1.5"/>
+                <polyline points="21 15 16 10 5 21"/>
+              </svg>
               <div style={{ fontWeight: 500, marginBottom: 4 }}>Drop image here</div>
               <div style={{ fontSize: 12, color: "#9ca3af" }}>or click to select a file</div>
             </div>

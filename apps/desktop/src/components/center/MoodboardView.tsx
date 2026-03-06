@@ -3,7 +3,14 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
-import { analyzeMoodboard, createSnippet, listAIProviders, updateProject } from "../../lib/tauri";
+import {
+  analyzeMoodboard,
+  createSnippet,
+  getDefaultVlmProviderId,
+  listAIProviders,
+  listProjects,
+  updateProject,
+} from "../../lib/tauri";
 import { useUIStore } from "../../store/uiStore";
 
 const IMAGE_EXT = /\.(png|jpe?g|webp)$/i;
@@ -19,6 +26,18 @@ export function MoodboardView() {
   const [editedStyle, setEditedStyle] = useState("");
 
   const aiProvidersQuery = useQuery({ queryKey: ["aiProviders"], queryFn: listAIProviders });
+  const projectsQuery = useQuery({ queryKey: ["projects"], queryFn: listProjects });
+  const defaultVlmProviderQuery = useQuery({
+    queryKey: ["defaultVlmProviderId"],
+    queryFn: getDefaultVlmProviderId,
+  });
+  const currentProject = projectsQuery.data?.find((project) => project.id === projectId) ?? null;
+
+  useEffect(() => {
+    if (defaultVlmProviderQuery.data && !providerOverride) {
+      setProviderOverride(defaultVlmProviderQuery.data);
+    }
+  }, [defaultVlmProviderQuery.data, providerOverride]);
 
   // Tauri native drag-drop for reliable file paths on all platforms
   useEffect(() => {
@@ -66,7 +85,7 @@ export function MoodboardView() {
   });
 
   const setAsGlobalSuffixMutation = useMutation({
-    mutationFn: () => updateProject(projectId ?? "", "", editedStyle),
+    mutationFn: () => updateProject(projectId ?? "", currentProject?.name ?? "", editedStyle),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["projects"] });
     },
@@ -210,7 +229,7 @@ export function MoodboardView() {
               <button
                 type="button"
                 disabled={
-                  !editedStyle.trim() || !projectId || setAsGlobalSuffixMutation.isPending
+                  !editedStyle.trim() || !projectId || !currentProject || setAsGlobalSuffixMutation.isPending
                 }
                 onClick={() => setAsGlobalSuffixMutation.mutate()}
               >

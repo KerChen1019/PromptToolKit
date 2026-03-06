@@ -6,6 +6,7 @@ pub struct Project {
     pub id: String,
     pub name: String,
     pub global_suffix: String,
+    pub custom_tags: Vec<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -19,6 +20,7 @@ pub struct Prompt {
     pub current_draft: String,
     pub current_version_id: Option<String>,
     pub starred: bool,
+    pub tags: Vec<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -69,6 +71,7 @@ pub struct ReferenceAsset {
     pub height: Option<i64>,
     pub tags: Vec<String>,
     pub linked_prompt_version_id: Option<String>,
+    pub prompt_id: Option<String>,
     pub created_at: String,
 }
 
@@ -99,6 +102,39 @@ pub struct OutputAttributionResponse {
     pub output_id: String,
     pub output_path: String,
     pub candidates: Vec<AttributionCandidate>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct OutputImage {
+    pub id: String,
+    pub project_id: String,
+    pub source_path: String,
+    pub stored_path: String,
+    pub model_hint: Option<String>,
+    pub prompt_id: Option<String>,
+    pub prompt_title: Option<String>,
+    pub created_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectClearSummary {
+    pub deleted_project_count: i64,
+    pub deleted_prompt_count: i64,
+    pub deleted_reference_count: i64,
+    pub deleted_output_count: i64,
+    pub removed_asset_file_count: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectExportResult {
+    pub bundle_path: String,
+    pub project_name: String,
+    pub prompt_count: i64,
+    pub reference_count: i64,
+    pub output_count: i64,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]

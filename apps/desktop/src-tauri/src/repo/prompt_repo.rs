@@ -5,6 +5,10 @@ use crate::{
 };
 use rusqlite::{params, Connection};
 
+fn parse_tags(json: String) -> Vec<String> {
+    serde_json::from_str::<Vec<String>>(&json).unwrap_or_default()
+}
+
 pub fn create(conn: &Connection, project_id: &str, title: &str, draft: &str) -> AppResult<Prompt> {
     let item = Prompt {
         id: id(),
@@ -13,12 +17,13 @@ pub fn create(conn: &Connection, project_id: &str, title: &str, draft: &str) -> 
         current_draft: draft.to_string(),
         current_version_id: None,
         starred: false,
+        tags: vec![],
         created_at: now(),
         updated_at: now(),
     };
     conn.execute(
-        "INSERT INTO prompts(id, project_id, title, current_draft, current_version_id, starred, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+        "INSERT INTO prompts(id, project_id, title, current_draft, current_version_id, starred, tags_json, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
         params![
             item.id,
             item.project_id,
@@ -26,6 +31,7 @@ pub fn create(conn: &Connection, project_id: &str, title: &str, draft: &str) -> 
             item.current_draft,
             item.current_version_id,
             item.starred as i64,
+            "[]",
             item.created_at,
             item.updated_at
         ],
@@ -35,7 +41,7 @@ pub fn create(conn: &Connection, project_id: &str, title: &str, draft: &str) -> 
 
 pub fn list_by_project(conn: &Connection, project_id: &str) -> AppResult<Vec<Prompt>> {
     let mut stmt = conn.prepare(
-        "SELECT id, project_id, title, current_draft, current_version_id, starred, created_at, updated_at
+        "SELECT id, project_id, title, current_draft, current_version_id, starred, tags_json, created_at, updated_at
          FROM prompts
          WHERE project_id = ?1
          ORDER BY starred DESC, updated_at DESC",
@@ -48,11 +54,21 @@ pub fn list_by_project(conn: &Connection, project_id: &str) -> AppResult<Vec<Pro
             current_draft: row.get(3)?,
             current_version_id: row.get(4)?,
             starred: row.get::<_, i64>(5)? != 0,
-            created_at: row.get(6)?,
-            updated_at: row.get(7)?,
+            tags: parse_tags(row.get::<_, String>(6)?),
+            created_at: row.get(7)?,
+            updated_at: row.get(8)?,
         })
     })?;
     Ok(rows.collect::<Result<Vec<_>, _>>()?)
+}
+
+pub fn update_title(conn: &Connection, prompt_id: &str, title: &str) -> AppResult<Prompt> {
+    let updated_at = now();
+    conn.execute(
+        "UPDATE prompts SET title = ?2, updated_at = ?3 WHERE id = ?1",
+        params![prompt_id, title, updated_at],
+    )?;
+    get(conn, prompt_id)
 }
 
 pub fn save_draft(conn: &Connection, prompt_id: &str, draft: &str) -> AppResult<Prompt> {
@@ -68,6 +84,20 @@ pub fn toggle_star(conn: &Connection, prompt_id: &str) -> AppResult<Prompt> {
     conn.execute(
         "UPDATE prompts SET starred = CASE WHEN starred = 0 THEN 1 ELSE 0 END WHERE id = ?1",
         [prompt_id],
+    )?;
+    get(conn, prompt_id)
+}
+
+pub fn delete(conn: &Connection, prompt_id: &str) -> AppResult<()> {
+    conn.execute("DELETE FROM prompts WHERE id = ?1", [prompt_id])?;
+    Ok(())
+}
+
+pub fn set_tags(conn: &Connection, prompt_id: &str, tags: &[String]) -> AppResult<Prompt> {
+    let tags_json = serde_json::to_string(tags).unwrap_or_else(|_| "[]".to_string());
+    conn.execute(
+        "UPDATE prompts SET tags_json = ?2, updated_at = ?3 WHERE id = ?1",
+        params![prompt_id, tags_json, now()],
     )?;
     get(conn, prompt_id)
 }
@@ -150,7 +180,7 @@ pub fn restore_version(conn: &Connection, prompt_id: &str, version_id: &str) -> 
 
 pub fn get(conn: &Connection, prompt_id: &str) -> AppResult<Prompt> {
     let item = conn.query_row(
-        "SELECT id, project_id, title, current_draft, current_version_id, starred, created_at, updated_at
+        "SELECT id, project_id, title, current_draft, current_version_id, starred, tags_json, created_at, updated_at
          FROM prompts WHERE id = ?1",
         [prompt_id],
         |row| {
@@ -161,8 +191,9 @@ pub fn get(conn: &Connection, prompt_id: &str) -> AppResult<Prompt> {
                 current_draft: row.get(3)?,
                 current_version_id: row.get(4)?,
                 starred: row.get::<_, i64>(5)? != 0,
-                created_at: row.get(6)?,
-                updated_at: row.get(7)?,
+                tags: parse_tags(row.get::<_, String>(6)?),
+                created_at: row.get(7)?,
+                updated_at: row.get(8)?,
             })
         },
     )?;

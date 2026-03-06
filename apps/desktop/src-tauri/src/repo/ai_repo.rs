@@ -166,9 +166,33 @@ pub fn secret_key_name(conn: &Connection, secret_ref_id: &str) -> AppResult<Stri
 }
 
 pub fn get_default_provider_id(conn: &Connection) -> AppResult<Option<String>> {
+    get_setting_value(conn, "default_llm_provider_id")
+}
+
+pub fn set_default_provider_id(conn: &Connection, provider_id: Option<&str>) -> AppResult<()> {
+    set_setting_value(conn, "default_llm_provider_id", provider_id.unwrap_or(""))
+}
+
+pub fn get_default_vlm_provider_id(conn: &Connection) -> AppResult<Option<String>> {
+    get_setting_value(conn, "default_vlm_provider_id")
+}
+
+pub fn set_default_vlm_provider_id(conn: &Connection, provider_id: Option<&str>) -> AppResult<()> {
+    set_setting_value(conn, "default_vlm_provider_id", provider_id.unwrap_or(""))
+}
+
+pub fn get_app_setting(conn: &Connection, key: &str) -> AppResult<Option<String>> {
+    get_setting_value(conn, key)
+}
+
+pub fn set_app_setting(conn: &Connection, key: &str, value: &str) -> AppResult<()> {
+    set_setting_value(conn, key, value)
+}
+
+fn get_setting_value(conn: &Connection, key: &str) -> AppResult<Option<String>> {
     let value = conn.query_row(
-        "SELECT value FROM app_settings WHERE key = 'default_llm_provider_id'",
-        [],
+        "SELECT value FROM app_settings WHERE key = ?1",
+        [key],
         |row| row.get::<_, String>(0),
     );
     match value {
@@ -178,13 +202,12 @@ pub fn get_default_provider_id(conn: &Connection) -> AppResult<Option<String>> {
     }
 }
 
-pub fn set_default_provider_id(conn: &Connection, provider_id: Option<&str>) -> AppResult<()> {
-    let value = provider_id.unwrap_or("");
+fn set_setting_value(conn: &Connection, key: &str, value: &str) -> AppResult<()> {
     conn.execute(
         "INSERT INTO app_settings(key, value, updated_at)
-         VALUES('default_llm_provider_id', ?1, ?2)
+         VALUES(?1, ?2, ?3)
          ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
-        params![value, now()],
+        params![key, value, now()],
     )?;
     Ok(())
 }
@@ -197,6 +220,22 @@ pub fn resolve_effective_provider(
         return Ok(Some(get(conn, provider_id)?));
     }
     if let Some(default_id) = get_default_provider_id(conn)? {
+        if let Ok(provider) = get(conn, &default_id) {
+            return Ok(Some(provider));
+        }
+    }
+    let enabled = list_enabled(conn)?;
+    Ok(enabled.into_iter().next())
+}
+
+pub fn resolve_effective_vlm_provider(
+    conn: &Connection,
+    provider_id_override: Option<&str>,
+) -> AppResult<Option<AIProvider>> {
+    if let Some(provider_id) = provider_id_override {
+        return Ok(Some(get(conn, provider_id)?));
+    }
+    if let Some(default_id) = get_default_vlm_provider_id(conn)? {
         if let Ok(provider) = get(conn, &default_id) {
             return Ok(Some(provider));
         }

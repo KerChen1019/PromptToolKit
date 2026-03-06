@@ -27,10 +27,14 @@ fn run_migrations(conn: &mut Connection) -> AppResult<()> {
         );",
     )?;
 
-    let migrations: [(&str, &str); 3] = [
+    let migrations: [(&str, &str); 7] = [
         ("0001_init", include_str!("../../migrations/0001_init.sql")),
         ("0002_ai_runs", include_str!("../../migrations/0002_ai_runs.sql")),
         ("0003_prompt_starred", include_str!("../../migrations/0003_prompt_starred.sql")),
+        ("0004_prompt_tags", include_str!("../../migrations/0004_prompt_tags.sql")),
+        ("0005_project_custom_tags", include_str!("../../migrations/0005_project_custom_tags.sql")),
+        ("0006_reference_prompt", include_str!("../../migrations/0006_reference_prompt.sql")),
+        ("0007_output_prompt", include_str!("../../migrations/0007_output_prompt.sql")),
     ];
 
     for (version, sql) in migrations {

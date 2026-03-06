@@ -24,11 +24,12 @@ pub fn insert_asset(
         height,
         tags: vec![],
         linked_prompt_version_id: None,
+        prompt_id: None,
         created_at: now(),
     };
     conn.execute(
-        "INSERT INTO reference_assets(id, project_id, source_path, stored_path, file_hash, width, height, linked_prompt_version_id, created_at)
-         VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+        "INSERT INTO reference_assets(id, project_id, source_path, stored_path, file_hash, width, height, linked_prompt_version_id, prompt_id, created_at)
+         VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
         params![
             item.id,
             item.project_id,
@@ -38,6 +39,7 @@ pub fn insert_asset(
             item.width,
             item.height,
             item.linked_prompt_version_id,
+            item.prompt_id,
             item.created_at
         ],
     )?;
@@ -48,90 +50,94 @@ pub fn list(
     conn: &Connection,
     project_id: &str,
     tag_filter: Option<&str>,
+    prompt_id_filter: Option<&str>,
 ) -> AppResult<Vec<ReferenceAsset>> {
     let mut items = Vec::new();
-    let mut stmt = if tag_filter.is_some() {
-        conn.prepare(
-            "SELECT DISTINCT ra.id, ra.project_id, ra.source_path, ra.stored_path, ra.file_hash, ra.width, ra.height, ra.linked_prompt_version_id, ra.created_at
+
+    // Build the query based on filters
+    let base_cols = "ra.id, ra.project_id, ra.source_path, ra.stored_path, ra.file_hash, ra.width, ra.height, ra.linked_prompt_version_id, ra.prompt_id, ra.created_at";
+
+    if let Some(filter) = tag_filter {
+        let sql = format!(
+            "SELECT DISTINCT {base_cols}
              FROM reference_assets ra
              JOIN reference_asset_tags rat ON rat.reference_asset_id = ra.id
              JOIN tags t ON t.id = rat.tag_id
              WHERE ra.project_id = ?1 AND t.name = ?2
+             {}
              ORDER BY ra.created_at DESC",
-        )?
-    } else {
-        conn.prepare(
-            "SELECT id, project_id, source_path, stored_path, file_hash, width, height, linked_prompt_version_id, created_at
-             FROM reference_assets
-             WHERE project_id = ?1
-             ORDER BY created_at DESC",
-        )?
-    };
-
-    if let Some(filter) = tag_filter {
-        let rows = stmt.query_map([project_id, filter], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, String>(2)?,
-                row.get::<_, String>(3)?,
-                row.get::<_, String>(4)?,
-                row.get::<_, Option<i64>>(5)?,
-                row.get::<_, Option<i64>>(6)?,
-                row.get::<_, Option<String>>(7)?,
-                row.get::<_, String>(8)?,
-            ))
-        })?;
-        for row in rows {
-            let row = row?;
-            let id = row.0.clone();
+            if prompt_id_filter.is_some() { "AND ra.prompt_id = ?3" } else { "" }
+        );
+        let mut stmt = conn.prepare(&sql)?;
+        let rows = if let Some(pid) = prompt_id_filter {
+            stmt.query_map(params![project_id, filter, pid], row_mapper)?
+                .collect::<Result<Vec<_>, _>>()?
+        } else {
+            stmt.query_map(params![project_id, filter], row_mapper)?
+                .collect::<Result<Vec<_>, _>>()?
+        };
+        for raw in rows {
+            let id = raw.0.clone();
             let tags = list_tags(conn, &id)?;
-            items.push(ReferenceAsset {
-                id,
-                project_id: row.1,
-                source_path: row.2,
-                stored_path: row.3,
-                file_hash: row.4,
-                width: row.5,
-                height: row.6,
-                linked_prompt_version_id: row.7,
-                tags,
-                created_at: row.8,
-            });
+            items.push(build_asset(raw, tags));
         }
     } else {
-        let rows = stmt.query_map([project_id], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, String>(2)?,
-                row.get::<_, String>(3)?,
-                row.get::<_, String>(4)?,
-                row.get::<_, Option<i64>>(5)?,
-                row.get::<_, Option<i64>>(6)?,
-                row.get::<_, Option<String>>(7)?,
-                row.get::<_, String>(8)?,
-            ))
-        })?;
-        for row in rows {
-            let row = row?;
-            let id = row.0.clone();
+        let sql = format!(
+            "SELECT {base_cols}
+             FROM reference_assets ra
+             WHERE ra.project_id = ?1
+             {}
+             ORDER BY ra.created_at DESC",
+            if prompt_id_filter.is_some() { "AND ra.prompt_id = ?2" } else { "" }
+        );
+        let mut stmt = conn.prepare(&sql)?;
+        let rows = if let Some(pid) = prompt_id_filter {
+            stmt.query_map(params![project_id, pid], row_mapper)?
+                .collect::<Result<Vec<_>, _>>()?
+        } else {
+            stmt.query_map(params![project_id], row_mapper)?
+                .collect::<Result<Vec<_>, _>>()?
+        };
+        for raw in rows {
+            let id = raw.0.clone();
             let tags = list_tags(conn, &id)?;
-            items.push(ReferenceAsset {
-                id,
-                project_id: row.1,
-                source_path: row.2,
-                stored_path: row.3,
-                file_hash: row.4,
-                width: row.5,
-                height: row.6,
-                linked_prompt_version_id: row.7,
-                tags,
-                created_at: row.8,
-            });
+            items.push(build_asset(raw, tags));
         }
     }
     Ok(items)
+}
+
+type RawRow = (String, String, String, String, String, Option<i64>, Option<i64>, Option<String>, Option<String>, String);
+
+fn row_mapper(row: &rusqlite::Row<'_>) -> rusqlite::Result<RawRow> {
+    Ok((
+        row.get(0)?,
+        row.get(1)?,
+        row.get(2)?,
+        row.get(3)?,
+        row.get(4)?,
+        row.get(5)?,
+        row.get(6)?,
+        row.get(7)?,
+        row.get(8)?,
+        row.get(9)?,
+    ))
+}
+
+fn build_asset(raw: RawRow, tags: Vec<String>) -> ReferenceAsset {
+    ReferenceAsset {
+        id: raw.0,
+        project_id: raw.1,
+        source_path: raw.2,
+        stored_path: raw.3,
+        file_hash: raw.4,
+        width: raw.5,
+        height: raw.6,
+        linked_prompt_version_id: raw.7,
+        prompt_id: raw.8,
+        tags,
+        created_at: raw.9,
+    }
 }
 
 fn list_tags(conn: &Connection, asset_id: &str) -> AppResult<Vec<String>> {
@@ -196,9 +202,31 @@ pub fn link_to_prompt_version(
     Ok(())
 }
 
+pub fn link_to_prompt(
+    conn: &Connection,
+    asset_id: &str,
+    prompt_id: Option<&str>,
+) -> AppResult<ReferenceAsset> {
+    conn.execute(
+        "UPDATE reference_assets SET prompt_id = ?2 WHERE id = ?1",
+        params![asset_id, prompt_id],
+    )?;
+    get(conn, asset_id)
+}
+
+pub fn delete(conn: &Connection, asset_id: &str) -> AppResult<String> {
+    let stored_path: String = conn.query_row(
+        "SELECT stored_path FROM reference_assets WHERE id = ?1",
+        [asset_id],
+        |row| row.get(0),
+    )?;
+    conn.execute("DELETE FROM reference_assets WHERE id = ?1", [asset_id])?;
+    Ok(stored_path)
+}
+
 pub fn get(conn: &Connection, asset_id: &str) -> AppResult<ReferenceAsset> {
     let raw = conn.query_row(
-        "SELECT id, project_id, source_path, stored_path, file_hash, width, height, linked_prompt_version_id, created_at
+        "SELECT id, project_id, source_path, stored_path, file_hash, width, height, linked_prompt_version_id, prompt_id, created_at
          FROM reference_assets WHERE id = ?1",
         [asset_id],
         |row| {
@@ -211,8 +239,9 @@ pub fn get(conn: &Connection, asset_id: &str) -> AppResult<ReferenceAsset> {
                 width: row.get(5)?,
                 height: row.get(6)?,
                 linked_prompt_version_id: row.get(7)?,
+                prompt_id: row.get(8)?,
                 tags: vec![],
-                created_at: row.get(8)?,
+                created_at: row.get(9)?,
             })
         },
     )?;

@@ -236,47 +236,37 @@ export function PromptGeneratorPanel() {
       {step === "dimensions" && (
         <div>
           <h3>Step 2 - Specify dimensions (optional)</h3>
-          <p style={{ margin: "0 0 12px", fontSize: 13, color: "#64748b" }}>
-            Prompt Generator and Image Analyzer now share the same canonical tags.
-            Open the right Snippets panel and drag tags into each dimension field.
+          <p style={{ margin: "0 0 10px", fontSize: 12, color: "#9ca3af" }}>
+            Drag tags from Snippets panel into any field, or type directly.
           </p>
-          <div style={{ display: "grid", gap: 12, marginBottom: 16 }}>
+          <div style={{ display: "grid", gap: 4, marginBottom: 16 }}>
             {GENERATOR_DIMENSIONS.map((d) => (
               <div
                 key={d.key}
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "160px 1fr",
+                  gridTemplateColumns: "130px 1fr",
                   gap: 8,
-                  alignItems: "start",
+                  alignItems: "center",
+                  borderRadius: 6,
+                  padding: "2px 4px",
+                  border: dragOverKey === d.key ? "1.5px dashed #0ea5e9" : "1.5px dashed transparent",
+                  background: dragOverKey === d.key ? "#f0f9ff" : "transparent",
+                  transition: "border-color 0.12s, background 0.12s",
                 }}
+                onDragOver={(e) => handleDimensionDragOver(e, d.key)}
+                onDragLeave={() => setDragOverKey((prev) => (prev === d.key ? null : prev))}
+                onDrop={(e) => handleDimensionDrop(e, d.key)}
               >
-                <label style={{ fontSize: 13, fontWeight: 500, paddingTop: 7 }}>{d.label}</label>
-                <div
-                  style={{
-                    display: "grid",
-                    gap: 6,
-                    border: dragOverKey === d.key ? "1px dashed #0ea5e9" : "1px dashed transparent",
-                    borderRadius: 8,
-                    padding: 6,
-                    background: dragOverKey === d.key ? "#f0f9ff" : "transparent",
-                  }}
-                  onDragOver={(e) => handleDimensionDragOver(e, d.key)}
-                  onDragLeave={() => setDragOverKey((prev) => (prev === d.key ? null : prev))}
-                  onDrop={(e) => handleDimensionDrop(e, d.key)}
-                >
-                  <input
-                    value={dimInputs[d.key]}
-                    onChange={(e) =>
-                      setDimInputs((prev) => ({ ...prev, [d.key]: e.target.value }))
-                    }
-                    placeholder={d.placeholder}
-                    style={{ fontSize: 13 }}
-                  />
-                  <div style={{ fontSize: 11, color: "#64748b" }}>
-                    Drop tag here: <code>{d.tag}</code>
-                  </div>
-                </div>
+                <label style={{ fontSize: 13, fontWeight: 500, color: "#374151" }}>{d.label}</label>
+                <input
+                  value={dimInputs[d.key]}
+                  onChange={(e) =>
+                    setDimInputs((prev) => ({ ...prev, [d.key]: e.target.value }))
+                  }
+                  placeholder={d.placeholder}
+                  style={{ fontSize: 13 }}
+                />
               </div>
             ))}
           </div>

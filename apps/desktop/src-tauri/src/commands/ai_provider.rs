@@ -63,6 +63,39 @@ pub fn ai_default_provider_set(
 }
 
 #[tauri::command]
+pub fn ai_default_vlm_provider_get(state: tauri::State<'_, AppState>) -> Result<Option<String>, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    ai_repo::get_default_vlm_provider_id(&conn).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn ai_default_vlm_provider_set(
+    state: tauri::State<'_, AppState>,
+    provider_id: Option<String>,
+) -> Result<(), String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    if let Some(ref provider_id) = provider_id {
+        let provider = ai_repo::get(&conn, provider_id).map_err(|e| e.to_string())?;
+        if !provider.enabled {
+            return Err("default VLM provider must be enabled".to_string());
+        }
+    }
+    ai_repo::set_default_vlm_provider_id(&conn, provider_id.as_deref()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn app_setting_get(state: tauri::State<'_, AppState>, key: String) -> Result<Option<String>, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    ai_repo::get_app_setting(&conn, &key).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn app_setting_set(state: tauri::State<'_, AppState>, key: String, value: String) -> Result<(), String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    ai_repo::set_app_setting(&conn, &key, &value).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub fn ai_provider_update(
     state: tauri::State<'_, AppState>,
     id: String,

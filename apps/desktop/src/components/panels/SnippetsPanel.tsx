@@ -1,43 +1,44 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createSnippet, deleteSnippet, listSnippets } from "../../lib/tauri";
 import {
-  CANONICAL_TAG_PRESETS,
-  CANONICAL_TAGS,
+  deleteSnippet,
+  getAppSetting,
+  listProjects,
+  listSnippets,
+  setAppSetting,
+} from "../../lib/tauri";
+import {
   TAG_DRAG_MIME,
+  buildDefaultTagTaxonomy,
   canonicalTagLabel,
+  categoryId,
+  mergeLegacyProjectCustomTags,
   normalizeTagForStorage,
+  normalizeTagTaxonomy,
+  serializeTagTaxonomy,
 } from "../../lib/tagTaxonomy";
 import { useUIStore } from "../../store/uiStore";
-import type { Scope } from "../../types/domain";
+import type { Scope, TagCategory } from "../../types/domain";
+
+const GLOBAL_TAG_TAXONOMY_KEY = "global_tag_taxonomy";
+const SCOPES: Scope[] = ["prefix", "free", "suffix"];
+
+type LibraryFilter = "all" | "current-project";
 
 export let insertSnippetToEditor: ((text: string) => void) | null = null;
+
 export function setInsertSnippetToEditor(fn: ((text: string) => void) | null) {
   insertSnippetToEditor = fn;
 }
 
-const SCOPES: Scope[] = ["prefix", "free", "suffix"];
+export let insertTagToEditor: ((tag: string) => void) | null = null;
 
-function normalizeTag(value: string): string {
-  return normalizeTagForStorage(value);
-}
-
-function parseTagsInput(input: string): string[] {
-  const seen = new Set<string>();
-  const result: string[] = [];
-  for (const part of input.split(",")) {
-    const normalized = normalizeTag(part);
-    if (!normalized || seen.has(normalized)) {
-      continue;
-    }
-    seen.add(normalized);
-    result.push(normalized);
-  }
-  return result;
+export function setInsertTagToEditor(fn: ((tag: string) => void) | null) {
+  insertTagToEditor = fn;
 }
 
 function setDragTagPayload(dataTransfer: DataTransfer, tag: string) {
-  const normalized = normalizeTag(tag);
+  const normalized = normalizeTagForStorage(tag);
   if (!normalized) {
     return;
   }
@@ -46,17 +47,31 @@ function setDragTagPayload(dataTransfer: DataTransfer, tag: string) {
   dataTransfer.effectAllowed = "copy";
 }
 
+function parseStoredTaxonomy(raw: string | null | undefined): TagCategory[] | null {
+  if (!raw) {
+    return null;
+  }
+  try {
+    return normalizeTagTaxonomy(JSON.parse(raw) as TagCategory[]);
+  } catch {
+    return null;
+  }
+}
+
 export function SnippetsPanel() {
   const projectId = useUIStore((s) => s.projectId);
   const queryClient = useQueryClient();
+  const hasSeededDefaultTaxonomy = useRef(false);
+  const knownCategoryIdsRef = useRef<Set<string>>(new Set());
 
-  const [showCreate, setShowCreate] = useState(false);
-  const [newName, setNewName] = useState("");
-  const [newScope, setNewScope] = useState<Scope>("free");
-  const [newContent, setNewContent] = useState("");
-  const [newTagsText, setNewTagsText] = useState("");
   const [searchText, setSearchText] = useState("");
   const [activeTag, setActiveTag] = useState<string>("all");
+  const [libraryFilter, setLibraryFilter] = useState<LibraryFilter>("all");
+  const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
+  const [addingTagCategoryId, setAddingTagCategoryId] = useState<string | null>(null);
+  const [newTagInput, setNewTagInput] = useState("");
+  const [creatingCategory, setCreatingCategory] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
 
   const snippetsQuery = useQuery({
     queryKey: ["snippets", projectId],
@@ -64,24 +79,34 @@ export function SnippetsPanel() {
     enabled: Boolean(projectId),
   });
 
-  const createMutation = useMutation({
-    mutationFn: () =>
-      createSnippet(
-        projectId ?? "",
-        newName.trim(),
-        newScope,
-        newContent.trim(),
-        parseTagsInput(newTagsText),
-      ),
-    onSuccess: () => {
-      setNewName("");
-      setNewScope("free");
-      setNewContent("");
-      setNewTagsText("");
-      setShowCreate(false);
-      queryClient.invalidateQueries({ queryKey: ["snippets", projectId] });
-    },
+  const projectsQuery = useQuery({ queryKey: ["projects"], queryFn: listProjects });
+  const taxonomyQuery = useQuery({
+    queryKey: ["appSetting", GLOBAL_TAG_TAXONOMY_KEY],
+    queryFn: () => getAppSetting(GLOBAL_TAG_TAXONOMY_KEY),
   });
+
+  const defaultTaxonomy = useMemo(
+    () => mergeLegacyProjectCustomTags(buildDefaultTagTaxonomy(), projectsQuery.data ?? []),
+    [projectsQuery.data],
+  );
+
+  const taxonomy = useMemo(() => parseStoredTaxonomy(taxonomyQuery.data) ?? defaultTaxonomy, [defaultTaxonomy, taxonomyQuery.data]);
+
+  const currentProject = projectsQuery.data?.find((project) => project.id === projectId) ?? null;
+
+  const saveTaxonomyMutation = useMutation({
+    mutationFn: (nextTaxonomy: TagCategory[]) =>
+      setAppSetting(GLOBAL_TAG_TAXONOMY_KEY, serializeTagTaxonomy(nextTaxonomy)),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["appSetting", GLOBAL_TAG_TAXONOMY_KEY] }),
+  });
+
+  useEffect(() => {
+    if (!taxonomyQuery.isSuccess || taxonomyQuery.data !== null || hasSeededDefaultTaxonomy.current) {
+      return;
+    }
+    hasSeededDefaultTaxonomy.current = true;
+    saveTaxonomyMutation.mutate(defaultTaxonomy);
+  }, [defaultTaxonomy, saveTaxonomyMutation, taxonomyQuery.data, taxonomyQuery.isSuccess]);
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteSnippet(id),
@@ -91,30 +116,24 @@ export function SnippetsPanel() {
   const snippets = snippetsQuery.data ?? [];
   const search = searchText.trim().toLowerCase();
 
-  const tagSummary = useMemo(() => {
+  const tagCounts = useMemo(() => {
     const counts = new Map<string, number>();
     for (const snippet of snippets) {
-      for (const tag of snippet.tags) {
-        const key = normalizeTag(tag);
-        if (!key) {
+      for (const rawTag of snippet.tags) {
+        const tag = normalizeTagForStorage(rawTag);
+        if (!tag) {
           continue;
         }
-        counts.set(key, (counts.get(key) ?? 0) + 1);
+        counts.set(tag, (counts.get(tag) ?? 0) + 1);
       }
     }
-    const allTags = Array.from(counts.keys()).sort();
-    for (const preset of CANONICAL_TAG_PRESETS) {
-      if (!allTags.includes(preset)) {
-        allTags.unshift(preset);
-      }
-    }
-    return { counts, allTags: Array.from(new Set(allTags)) };
+    return counts;
   }, [snippets]);
 
   const filteredSnippets = useMemo(() => {
     return snippets.filter((snippet) => {
       if (activeTag !== "all") {
-        const hasTag = snippet.tags.some((tag) => normalizeTag(tag) === activeTag);
+        const hasTag = snippet.tags.some((tag) => normalizeTagForStorage(tag) === activeTag);
         if (!hasTag) {
           return false;
         }
@@ -125,76 +144,439 @@ export function SnippetsPanel() {
       const haystack = `${snippet.name} ${snippet.content} ${snippet.tags.join(" ")}`.toLowerCase();
       return haystack.includes(search);
     });
-  }, [snippets, activeTag, search]);
+  }, [activeTag, search, snippets]);
+
+  const taxonomyForDisplay = useMemo(() => {
+    return taxonomy.map((category) => {
+      if (libraryFilter !== "current-project" || !projectId) {
+        return category;
+      }
+      return {
+        ...category,
+        tags: category.tags.filter((tag) => tag.projectIds.includes(projectId)),
+      };
+    });
+  }, [libraryFilter, projectId, taxonomy]);
+
+  useEffect(() => {
+    const ids = taxonomy.map((category) => categoryId(category));
+    setCollapsedCategories((previous) => {
+      const next = new Set<string>();
+      let changed = false;
+
+      for (const id of previous) {
+        if (ids.includes(id)) {
+          next.add(id);
+        } else {
+          changed = true;
+        }
+      }
+
+      for (const id of ids) {
+        if (!knownCategoryIdsRef.current.has(id)) {
+          next.add(id);
+          changed = true;
+        }
+      }
+
+      knownCategoryIdsRef.current = new Set(ids);
+
+      if (!changed && next.size === previous.size) {
+        let same = true;
+        for (const id of next) {
+          if (!previous.has(id)) {
+            same = false;
+            break;
+          }
+        }
+        if (same) {
+          return previous;
+        }
+      }
+
+      return next;
+    });
+  }, [taxonomy]);
+
+  function updateTaxonomy(transform: (current: TagCategory[]) => TagCategory[]) {
+    const nextTaxonomy = normalizeTagTaxonomy(transform(taxonomy));
+    saveTaxonomyMutation.mutate(nextTaxonomy);
+  }
+
+  function toggleCategory(category: TagCategory) {
+    const key = categoryId(category);
+    setCollapsedCategories((previous) => {
+      const next = new Set(previous);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  }
+
+  function addTagToCategory(category: TagCategory) {
+    const rawTag = newTagInput.trim();
+    if (!rawTag) {
+      setAddingTagCategoryId(null);
+      setNewTagInput("");
+      return;
+    }
+
+    updateTaxonomy((current) => {
+      const key = categoryId(category);
+      return current.map((item) => {
+        if (categoryId(item) !== key) {
+          return item;
+        }
+        const value = normalizeTagForStorage(rawTag);
+        if (!value || item.tags.some((tag) => tag.value === value)) {
+          return item;
+        }
+        return {
+          ...item,
+          tags: [...item.tags, { value, projectIds: [] }],
+        };
+      });
+    });
+
+    setAddingTagCategoryId(null);
+    setNewTagInput("");
+  }
+
+  function removeTagFromCategory(category: TagCategory, tagValue: string) {
+    updateTaxonomy((current) =>
+      current.map((item) => {
+        if (categoryId(item) !== categoryId(category)) {
+          return item;
+        }
+        return {
+          ...item,
+          tags: item.tags.filter((tag) => tag.value !== tagValue),
+        };
+      }),
+    );
+    if (activeTag === tagValue) {
+      setActiveTag("all");
+    }
+  }
+
+  function toggleProjectAssociation(category: TagCategory, tagValue: string) {
+    if (!projectId) {
+      return;
+    }
+    updateTaxonomy((current) =>
+      current.map((item) => {
+        if (categoryId(item) !== categoryId(category)) {
+          return item;
+        }
+        return {
+          ...item,
+          tags: item.tags.map((tag) => {
+            if (tag.value !== tagValue) {
+              return tag;
+            }
+            const isLinked = tag.projectIds.includes(projectId);
+            return {
+              ...tag,
+              projectIds: isLinked
+                ? tag.projectIds.filter((id) => id !== projectId)
+                : [...tag.projectIds, projectId],
+            };
+          }),
+        };
+      }),
+    );
+  }
+
+  function addCustomCategory() {
+    const name = newCategoryName.trim();
+    if (!name) {
+      setCreatingCategory(false);
+      setNewCategoryName("");
+      return;
+    }
+    updateTaxonomy((current) => {
+      const exists = current.some(
+        (category) => category.dimensionKey === null && category.name.toLowerCase() === name.toLowerCase(),
+      );
+      if (exists) {
+        return current;
+      }
+      return [...current, { name, dimensionKey: null, tags: [] }];
+    });
+    setCreatingCategory(false);
+    setNewCategoryName("");
+  }
+
+  function deleteCustomCategory(category: TagCategory) {
+    updateTaxonomy((current) => current.filter((item) => categoryId(item) !== categoryId(category)));
+  }
+
+  function toggleActiveTag(tagValue: string) {
+    setActiveTag((current) => (current === tagValue ? "all" : tagValue));
+  }
+
+  const flatVisibleTags = useMemo(
+    () => {
+      const unique = new Map<string, { category: TagCategory; tag: TagCategory["tags"][number] }>();
+      for (const category of taxonomyForDisplay) {
+        for (const tag of category.tags) {
+          if (!unique.has(tag.value)) {
+            unique.set(tag.value, { category, tag });
+          }
+        }
+      }
+      return Array.from(unique.values());
+    },
+    [taxonomyForDisplay],
+  );
 
   const snippetsByScope = (scope: Scope) =>
     filteredSnippets.filter((snippet) => snippet.scope === scope);
-
-  function appendPresetTag(tag: string) {
-    const tags = parseTagsInput(newTagsText);
-    if (!tags.includes(tag)) {
-      tags.push(tag);
-    }
-    setNewTagsText(tags.join(", "));
-  }
 
   if (!projectId) {
     return <p style={{ fontSize: 12, color: "#9ca3af", padding: 8 }}>Select a project first.</p>;
   }
 
   return (
-    <div>
-      <div style={{ display: "grid", gap: 8, marginBottom: 10 }}>
-        <p style={{ margin: 0, fontSize: 11, color: "#64748b" }}>
-          Drag tags from here into Prompt Generator dimension fields.
-        </p>
-        <input
-          value={searchText}
-          onChange={(e) => setSearchText(e.target.value)}
-          placeholder="Search snippets or tags..."
-          style={{ fontSize: 12 }}
-        />
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-          <button
-            type="button"
-            className={activeTag === "all" ? "primary" : ""}
-            style={{ fontSize: 11, padding: "3px 8px" }}
-            onClick={() => setActiveTag("all")}
-          >
-            all ({snippets.length})
-          </button>
-          {tagSummary.allTags.map((tag) => (
+    <div style={{ display: "grid", gap: 12, minWidth: 0, overflowX: "hidden" }}>
+      <section style={{ display: "grid", gap: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-primary)" }}>Tag Library</div>
+            <div style={{ fontSize: 10, color: "var(--text-faint)", marginTop: 2 }}>
+              {taxonomyForDisplay.length} categories · {flatVisibleTags.length} tags
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
             <button
-              key={tag}
               type="button"
-              className={activeTag === tag ? "primary" : ""}
-              style={{ fontSize: 11, padding: "3px 8px" }}
-              onClick={() => setActiveTag(tag)}
-              draggable
-              onDragStart={(e) => setDragTagPayload(e.dataTransfer, tag)}
-              title="Drag this tag to Prompt Generator"
+              className={libraryFilter === "all" ? "primary sm" : "sm"}
+              onClick={() => setLibraryFilter("all")}
             >
-              {canonicalTagLabel(tag)} ({tagSummary.counts.get(tag) ?? 0})
+              All
             </button>
-          ))}
+            <button
+              type="button"
+              className={libraryFilter === "current-project" ? "primary sm" : "sm"}
+              onClick={() => setLibraryFilter("current-project")}
+            >
+              Current Project
+            </button>
+            {creatingCategory ? (
+              <input
+                autoFocus
+                value={newCategoryName}
+                onChange={(event) => setNewCategoryName(event.target.value)}
+                placeholder="Custom category name"
+                style={{ fontSize: 11, width: 160 }}
+                onBlur={addCustomCategory}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    addCustomCategory();
+                  }
+                  if (event.key === "Escape") {
+                    setCreatingCategory(false);
+                    setNewCategoryName("");
+                  }
+                }}
+              />
+            ) : (
+              <button type="button" className="sm" onClick={() => setCreatingCategory(true)}>
+                + Category
+              </button>
+            )}
+          </div>
         </div>
-      </div>
+
+        <div style={{ display: "grid", gap: 8 }}>
+          {taxonomyForDisplay.map((category) => {
+            const key = categoryId(category);
+            const isCollapsed = collapsedCategories.has(key);
+            const isCustomCategory = category.dimensionKey === null;
+            const visibleTags = category.tags;
+
+            return (
+              <div key={key} style={{ borderBottom: "1px solid var(--border-muted)", paddingBottom: 8 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    className="xs ghost"
+                    onClick={() => toggleCategory(category)}
+                  >
+                    {isCollapsed ? "▸" : "▾"}
+                  </button>
+                  <span style={{ flex: 1, fontSize: 12, fontWeight: 600 }}>{category.name}</span>
+                  <span
+                    style={{
+                      fontSize: 10,
+                      padding: "1px 5px",
+                      borderRadius: 999,
+                      background: "var(--bg-subtle)",
+                      color: "var(--text-muted)",
+                    }}
+                  >
+                    {visibleTags.length}
+                  </span>
+                  <button
+                    type="button"
+                    className="xs"
+                    onClick={() => {
+                      setAddingTagCategoryId(key);
+                      setNewTagInput("");
+                    }}
+                  >
+                    + Tag
+                  </button>
+                  {isCustomCategory && (
+                    <button
+                      type="button"
+                      className="xs danger"
+                      onClick={() => deleteCustomCategory(category)}
+                    >
+                      Delete
+                    </button>
+                  )}
+                </div>
+
+                {addingTagCategoryId === key && (
+                  <div style={{ marginTop: 8 }}>
+                    <input
+                      autoFocus
+                      value={newTagInput}
+                      onChange={(event) => setNewTagInput(event.target.value)}
+                      placeholder="tag name"
+                      style={{ fontSize: 11, width: "100%" }}
+                      onBlur={() => addTagToCategory(category)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          addTagToCategory(category);
+                        }
+                        if (event.key === "Escape") {
+                          setAddingTagCategoryId(null);
+                          setNewTagInput("");
+                        }
+                      }}
+                    />
+                  </div>
+                )}
+
+                {!isCollapsed && (
+                  <div style={{ marginTop: 8, display: "grid", gap: 8 }}>
+                    {visibleTags.length === 0 && (
+                      <div style={{ fontSize: 11, color: "#94a3b8" }}>
+                        {libraryFilter === "current-project"
+                          ? "No tags linked to this project yet."
+                          : "No tags in this category yet."}
+                      </div>
+                    )}
+
+                    {visibleTags.length > 0 && (
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                        {visibleTags.map((tagEntry) => {
+                          const isPinned = projectId ? tagEntry.projectIds.includes(projectId) : false;
+                          const count = tagCounts.get(tagEntry.value) ?? 0;
+                          return (
+                            <div
+                              key={`${key}-${tagEntry.value}`}
+                              role="button"
+                              tabIndex={0}
+                              draggable
+                              onDragStart={(event) => setDragTagPayload(event.dataTransfer, tagEntry.value)}
+                              onClick={() => {
+                                if (insertTagToEditor) {
+                                  insertTagToEditor(tagEntry.value);
+                                } else {
+                                  toggleActiveTag(tagEntry.value);
+                                }
+                              }}
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter" || event.key === " ") {
+                                  event.preventDefault();
+                                  if (insertTagToEditor) {
+                                    insertTagToEditor(tagEntry.value);
+                                  } else {
+                                    toggleActiveTag(tagEntry.value);
+                                  }
+                                }
+                              }}
+                              title="Click to insert · Drag to editor or Generator"
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: 4,
+                                padding: 4,
+                                borderRadius: 999,
+                                background: activeTag === tagEntry.value ? "var(--accent-bg)" : "var(--bg-subtle)",
+                                border: `1px solid ${activeTag === tagEntry.value ? "var(--accent)" : "var(--border)"}`,
+                                maxWidth: "100%",
+                                cursor: "grab",
+                              }}
+                            >
+                              <span style={{ fontSize: 11, padding: "1px 4px" }}>
+                                {canonicalTagLabel(tagEntry.value)} ({count})
+                              </span>
+                              <button
+                                type="button"
+                                className="xs"
+                                style={isPinned ? { color: "var(--accent)", borderColor: "var(--accent)" } : undefined}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  toggleProjectAssociation(category, tagEntry.value);
+                                }}
+                                disabled={!projectId}
+                                draggable={false}
+                                title={isPinned ? `Unlink from ${currentProject?.name ?? "project"}` : `Link to ${currentProject?.name ?? "project"}`}
+                              >
+                                {isPinned ? "Pinned" : "Pin"}
+                              </button>
+                              <button
+                                type="button"
+                                className="xs danger"
+                                draggable={false}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  removeTagFromCategory(category, tagEntry.value);
+                                }}
+                              >
+                                x
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      <section style={{ display: "grid", gap: 8 }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", minWidth: 0 }}>
+          <input
+            value={searchText}
+            onChange={(event) => setSearchText(event.target.value)}
+            placeholder="Search snippets or tags..."
+            style={{ fontSize: 12, flex: 1, minWidth: 0 }}
+          />
+        </div>
+      </section>
 
       {SCOPES.map((scope) => {
         const items = snippetsByScope(scope);
         if (items.length === 0) {
           return null;
         }
+
         return (
-          <div key={scope} style={{ marginBottom: 12 }}>
+          <div key={scope} style={{ marginBottom: 4 }}>
             <div
-              style={{
-                fontSize: 11,
-                fontWeight: 600,
-                color: "#9ca3af",
-                textTransform: "uppercase",
-                marginBottom: 4,
-              }}
+              className="panel-section-title"
             >
               {scope}
             </div>
@@ -207,14 +589,14 @@ export function SnippetsPanel() {
                   </span>
                   <button
                     type="button"
-                    style={{ fontSize: 11, padding: "2px 8px" }}
+                    className="sm"
                     onClick={() => insertSnippetToEditor?.(snippet.content)}
                   >
                     Insert
                   </button>
                   <button
                     type="button"
-                    style={{ fontSize: 11, padding: "2px 6px", color: "#ef4444", borderColor: "#fca5a5" }}
+                    className="xs danger"
                     onClick={() => deleteMutation.mutate(snippet.id)}
                   >
                     x
@@ -230,28 +612,47 @@ export function SnippetsPanel() {
                 {snippet.tags.length > 0 && (
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 6 }}>
                     {snippet.tags.map((tag) => {
-                      const key = normalizeTag(tag);
-                      if (!key) {
+                      const normalized = normalizeTagForStorage(tag);
+                      if (!normalized) {
                         return null;
                       }
                       return (
-                        <button
-                          key={`${snippet.id}-${key}`}
-                          type="button"
+                        <span
+                          key={`${snippet.id}-${normalized}`}
+                          role="button"
+                          tabIndex={0}
                           style={{
+                            display: "inline-flex",
                             fontSize: 10,
                             padding: "2px 6px",
                             borderRadius: 999,
-                            background: activeTag === key ? "#dbeafe" : "#f1f5f9",
-                            borderColor: activeTag === key ? "#93c5fd" : "#e2e8f0",
+                            background: activeTag === normalized ? "var(--accent-bg)" : "var(--bg-subtle)",
+                            border: `1px solid ${activeTag === normalized ? "var(--accent)" : "var(--border)"}`,
+                            cursor: "grab",
                           }}
-                          onClick={() => setActiveTag(key)}
+                          onClick={() => {
+                            if (insertTagToEditor) {
+                              insertTagToEditor(normalized);
+                            } else {
+                              toggleActiveTag(normalized);
+                            }
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              if (insertTagToEditor) {
+                                insertTagToEditor(normalized);
+                              } else {
+                                toggleActiveTag(normalized);
+                              }
+                            }
+                          }}
                           draggable
-                          onDragStart={(e) => setDragTagPayload(e.dataTransfer, key)}
-                          title="Drag this tag to Prompt Generator"
+                          onDragStart={(event) => setDragTagPayload(event.dataTransfer, normalized)}
+                          title="Click to insert · Drag to editor or Generator"
                         >
-                          {canonicalTagLabel(key)}
-                        </button>
+                          {canonicalTagLabel(normalized)}
+                        </span>
                       );
                     })}
                   </div>
@@ -262,81 +663,10 @@ export function SnippetsPanel() {
         );
       })}
 
-      {filteredSnippets.length === 0 && !showCreate && (
+      {filteredSnippets.length === 0 && (
         <p style={{ fontSize: 12, color: "#9ca3af" }}>
           {snippets.length === 0 ? "No snippets yet." : "No snippets match this tag/search."}
         </p>
-      )}
-
-      {showCreate ? (
-        <div style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 10, marginTop: 8 }}>
-          <div style={{ display: "grid", gap: 6 }}>
-            <input
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              placeholder="Snippet name"
-              style={{ fontSize: 12 }}
-            />
-            <select
-              value={newScope}
-              onChange={(e) => setNewScope(e.target.value as Scope)}
-              style={{ fontSize: 12 }}
-            >
-              {SCOPES.map((scope) => (
-                <option key={scope} value={scope}>
-                  {scope}
-                </option>
-              ))}
-            </select>
-            <textarea
-              value={newContent}
-              onChange={(e) => setNewContent(e.target.value)}
-              placeholder="Snippet content..."
-              rows={4}
-              style={{ fontSize: 12, resize: "vertical" }}
-            />
-            <input
-              value={newTagsText}
-              onChange={(e) => setNewTagsText(e.target.value)}
-              placeholder="tags: subject-action, camera-lens, lighting..."
-              style={{ fontSize: 12 }}
-            />
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              {CANONICAL_TAGS.map((def) => (
-                <button
-                  key={def.key}
-                  type="button"
-                  style={{ fontSize: 11, padding: "2px 8px" }}
-                  onClick={() => appendPresetTag(def.key)}
-                >
-                  + {def.label}
-                </button>
-              ))}
-            </div>
-            <div style={{ display: "flex", gap: 6 }}>
-              <button
-                type="button"
-                className="primary"
-                style={{ fontSize: 12 }}
-                onClick={() => createMutation.mutate()}
-                disabled={!newName.trim() || !newContent.trim() || createMutation.isPending}
-              >
-                {createMutation.isPending ? "Saving..." : "Save"}
-              </button>
-              <button type="button" style={{ fontSize: 12 }} onClick={() => setShowCreate(false)}>
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : (
-        <button
-          type="button"
-          style={{ width: "100%", marginTop: 8, fontSize: 12, textAlign: "center" }}
-          onClick={() => setShowCreate(true)}
-        >
-          + New Snippet
-        </button>
       )}
     </div>
   );

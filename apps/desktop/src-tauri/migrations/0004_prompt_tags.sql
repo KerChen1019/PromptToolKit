@@ -1,0 +1,1 @@
+ALTER TABLE prompts ADD COLUMN tags_json TEXT NOT NULL DEFAULT '[]';

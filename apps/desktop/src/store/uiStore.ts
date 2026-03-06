@@ -1,7 +1,8 @@
 import { create } from "zustand";
 
 export type RightPanelKey = "versions" | "snippets" | "references" | "outputs";
-export type CenterView = "editor" | "generator" | "image-analyzer" | "moodboard" | "ai-settings";
+export type CenterView = "editor" | "image-analyzer" | "moodboard" | "ai-settings";
+export type Theme = "light" | "dark";
 
 interface UIState {
   projectId: string | null;
@@ -11,6 +12,7 @@ interface UIState {
   centerView: CenterView;
   selectedLeftVersionId: string | null;
   selectedRightVersionId: string | null;
+  theme: Theme;
 
   setProjectId: (id: string | null) => void;
   setPromptId: (id: string | null) => void;
@@ -19,6 +21,20 @@ interface UIState {
   toggleRightPanel: (panel: RightPanelKey) => void;
   setCenterView: (view: CenterView) => void;
   setDiffSelection: (left: string | null, right: string | null) => void;
+  setTheme: (theme: Theme) => void;
+  toggleTheme: () => void;
+}
+
+const THEME_KEY = "ptk:theme";
+
+function loadTheme(): Theme {
+  try {
+    const stored = window.localStorage.getItem(THEME_KEY);
+    if (stored === "dark" || stored === "light") return stored;
+  } catch {
+    // ignore
+  }
+  return "light";
 }
 
 export const useUIStore = create<UIState>((set, get) => ({
@@ -29,6 +45,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   centerView: "editor",
   selectedLeftVersionId: null,
   selectedRightVersionId: null,
+  theme: loadTheme(),
 
   setProjectId: (projectId) => set({ projectId }),
   setPromptId: (promptId) => set({ promptId }),
@@ -39,4 +56,13 @@ export const useUIStore = create<UIState>((set, get) => ({
   setCenterView: (centerView) => set({ centerView }),
   setDiffSelection: (selectedLeftVersionId, selectedRightVersionId) =>
     set({ selectedLeftVersionId, selectedRightVersionId }),
+  setTheme: (theme) => {
+    try { window.localStorage.setItem(THEME_KEY, theme); } catch { /* ignore */ }
+    set({ theme });
+  },
+  toggleTheme: () => {
+    const next: Theme = get().theme === "light" ? "dark" : "light";
+    try { window.localStorage.setItem(THEME_KEY, next); } catch { /* ignore */ }
+    set({ theme: next });
+  },
 }));
