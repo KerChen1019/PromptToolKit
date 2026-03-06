@@ -1,0 +1,232 @@
+Claude’s Plan
+PromptToolKit — Step 4：前端 UX 全面重构
+Context
+当前实现是 Tab 切换式界面（8 个独立面板），编辑器是其中一个 Tab。用户一旦进入 Snippets 或 Versions 页，编辑器就消失。这完全违背了策划书的核心设计原则：编辑器永远是主体，其他所有东西服务于"我在编辑这个 prompt"这个核心动作。
+
+目标：重构为三栏式布局，编辑器始终可见，其他功能以侧边面板形式围绕编辑器存在。
+
+目标 UX 布局
+
+┌────────────┬──────────────────────────────────────┬────┬──────────────────┐
+│ 左导航      │       中央编辑区（始终存在）            │图标│  右侧面板         │
+│ 200px      │                                      │ 栏 │  240px (可折叠)   │
+│            │  ┌── 顶部工具栏 ────────────────────┐ │ V  │                  │
+│▼ Project A │  │ Project > Prompt  [Save] [Copy]  │ │ S  │  版本列表         │
+│  Prompt 1  │  └──────────────────────────────────┘ │ R  │   or             │
+│  Prompt 2  │                                      │ O  │  片段库           │
+│            │  [Monaco Editor — flex-1 全高]        │    │   or             │
+│▼ Project B │                                      │    │  参考管理         │
+│  ...       │  ─── 候选区（触发改写后展开）──────── │    │   or             │
+│            │  [conservative] [balanced] [aggressive]│   │  产出对比         │
+│ ─────────  │                                      │    │                  │
+│ ⚙ Settings │                                      │    │                  │
+│ 🔧 Generator│                                      │    │                  │
+└────────────┴──────────────────────────────────────┴────┴──────────────────┘
+Modifier 气泡：选中编辑器内的文字后，在选区旁边浮出一个小工具条 [✏ Rewrite]，点击后在编辑器下方候选区出现 instruction 输入框 → 提交 → 3 个候选展开。
+
+需要修改的文件
+1. src/index.css 或 src/styles.css
+变更：更新主布局 grid
+
+
+.app-shell {
+  display: grid;
+  grid-template-columns: 200px 1fr 48px;
+  /* 右侧面板通过 grid 或 CSS 变量动态加宽 */
+}
+候选区：编辑器下方，max-height: 0 → 320px 过渡展开。
+浮动气泡：position: absolute; z-index: 100。
+
+2. src/store/uiStore.ts
+新增状态：
+
+
+rightPanel: "versions" | "snippets" | "references" | "outputs" | null;
+setRightPanel: (panel: ...) => void;
+移除：view 字段（不再需要 Tab 导航）。
+
+3. src/App.tsx
+变更：从 Tab 布局改为三栏布局。
+
+
+<div className="app-shell">
+  <LeftNav />
+  <CenterEditor />
+  <RightActivityBar />
+  {rightPanel && <RightPanel />}
+</div>
+AI Settings 和 Prompt Generator 作为覆盖层（overlay），通过左导航底部图标触发。
+
+4. 新建 src/components/LeftNav.tsx
+功能：
+
+查询并显示所有项目（可折叠列表）
+每个项目下显示其 Prompts（点击 → 设置 projectId + promptId）
+"+" 按钮新建项目 / 新建 Prompt（inline 输入，不弹窗）
+底部图标：⚙ AI Settings（覆盖层）、🔧 Prompt Generator（覆盖层）
+当前选中的 Prompt 高亮显示
+复用：listProjects、listPromptsByProject、createProject、createPrompt 命令已在 src/lib/tauri.ts 中。
+
+5. 新建 src/components/RightActivityBar.tsx
+功能：
+
+4 个图标按钮（纵向排列，48px 宽）：
+📋 Versions
+📦 Snippets
+🖼 References
+📤 Outputs
+点击 → 切换 rightPanel 状态（再次点击收起 → null）
+当前激活图标高亮
+6. 新建 src/components/RightPanel.tsx
+功能：根据 rightPanel 状态渲染对应面板，宽度 240px。
+内嵌以下面板（各自 refactor 为 sidebar 形式）：
+
+src/components/panels/VersionsPanel.tsx（从 VersionHistoryPanel.tsx 适配）
+紧凑列表：版本号、时间戳、commit message
+点击版本 → 在面板内展开 inline diff（复用 diffPromptVersions）
+Restore 按钮
+src/components/panels/SnippetsPanel.tsx（从 SnippetLibraryPanel.tsx 适配）
+按 scope 分组显示（prefix / free / suffix）
+每个 Snippet 有 "Insert" 按钮（插入到编辑器光标位置）
+底部有 "Create Snippet" 折叠区（填名称、scope、内容）
+Slash command 的另一个入口（见下）
+src/components/panels/ReferencesPanel.tsx（从 ReferenceManagerPanel.tsx 适配）
+图片缩略图网格或列表（显示 storedPath 对应的图片）
+拖拽或粘贴图片文件导入（触发 importReference）
+点击图片可添加/编辑标签
+标签筛选 dropdown
+src/components/panels/OutputsPanel.tsx（从 OutputInboxPanel.tsx 适配）
+粘贴图片 → 触发 pasteImportAndAutoAttribution
+候选归因列表（score + reason）
+一键 Confirm 归因
+显示已确认的产出（小图缩略图 + 对应 prompt 版本）
+7. 重构 src/pages/EditorWorkspace.tsx → src/components/CenterEditor.tsx
+功能：
+
+顶部工具栏（一行）：Project Name > Prompt Title / Save Draft / Commit + Copy
+Monaco Editor（height: 100%，不固定 px，通过 flex 撑满剩余高度）
+onMount 存 editorRef
+Selection 检测 → 显示浮动 Modifier 气泡
+Modifier 气泡实现：
+
+Monaco 的 onDidChangeCursorSelection 事件 → 有非空选区时显示气泡
+气泡位置：通过 editor.getScrolledVisiblePosition(selection.getStartPosition()) 计算绝对坐标
+气泡内容：[✏ Rewrite] 按钮 + Preserve Voice 切换
+点击 Rewrite → 展开候选区（见下）
+候选区（Below Editor）：
+
+max-height 动画展开，默认收起
+出现时机：rewriteMutation.isPending 或 rewriteMutation.data 有数据
+内容：instruction 输入框 + 3 个候选卡片（conservative / balanced / aggressive）
+每卡片：candidate text 预览 + diff + Apply 按钮
+Apply 调用 applyCandidate()（复用已有逻辑）
+右上角 X 关闭
+Slash Command 片段插入：
+
+Monaco editor.addCommand 或监听 onDidChangeModelContent
+检测输入 / → 显示 snippet picker overlay（列表，箭头键导航，Enter 插入）
+选中 snippet → 替换 / + 触发词，插入 snippet 内容
+8. 覆盖层（Overlay）
+src/components/overlays/AISettingsOverlay.tsx（重新设计，不是简单适配）
+
+新的 3 步引导式 UI：
+
+
+Step 1  选择 Provider 类型
+        [OpenAI]  [Anthropic]  [Gemini]  [OpenAI Compatible]
+        （大图标卡片，单击选中）
+
+Step 2  输入 API Key
+        API Key: [___________]
+        Base URL: [___________]  ← 仅 openai_compatible 显示
+        [加载可用模型 →]
+
+Step 3  从下拉列表选 Model（不手动输入）
+        Model: [claude-sonnet-4-6 ▼]
+        Name: [My Anthropic Provider]
+        [保存]
+模型列表来源：
+
+openai / openai_compatible / gemini：调用 ai_provider_fetch_models（新命令），用已有的 HTTP client 请求 /v1/models（Gemini 用 /v1beta/models），返回 model id 列表
+anthropic：后端返回硬编码列表（claude-opus-4-6, claude-sonnet-4-6, claude-haiku-4-5-20251001, claude-3-5-sonnet-20241022 等）
+新的 Rust 命令 ai_provider_fetch_models：
+
+输入：provider kind + base_url + api_key（临时的，尚未保存）
+输出：Vec<String>（model id 列表）
+失败时返回 error（前端降级为手动输入）
+src/components/overlays/PromptGeneratorOverlay.tsx（从 PromptGeneratorPanel.tsx 适配）
+
+从左侧导航底部触发，全屏 overlay
+src/components/overlays/ImageAnalyzerOverlay.tsx（新建）
+
+工作流：
+
+
+Step 1  拖拽/选择一张图片
+Step 2  点击"分析" → VLM 按维度分析
+Step 3  展示各维度结果（两层：Core + 展开 Detail）
+        ☑ 镜头语言   "portrait, 85mm feel, shallow DoF"
+        ☑ 灯光       "golden hour side lighting, warm diffused"
+        ☐ 人物动作   "standing, weight on left foot, slight turn"
+        ☑ 材质       "worn leather jacket, matte finish"
+        ☑ VFX 特效   "subtle atmospheric haze, lens flare"
+Step 4  勾选维度 → "插入编辑器" 或 "保存为 Snippet"
+反垃圾过滤：不输出 masterpiece / best quality / highly detailed 等废话词。
+置信度标注：低置信维度（如相机 f-stop）标注 "低置信 — 推测"。
+
+后端新命令：image_analyze
+
+输入：image_path: String, provider_id: Option<String>（使用 VLM 能力的 provider）
+输出：Vec<DimensionResult> — 每个维度包含 name, core, detail, confidence
+使用已有的 AI provider 系统，发 base64 图片给 VLM
+src/components/overlays/MoodboardOverlay.tsx（新建）
+
+工作流：
+
+
+Step 1  拖拽 / 多选 5-20 张图片
+Step 2  点击"分析 Moodboard" → VLM 批量分析
+Step 3  展示结果：
+        共性风格（可编辑自然语言文本）
+        差异点标注
+Step 4  选择输出方向：
+        [设为项目全局后缀]  [保存为 suffix Snippet]
+后端新命令：moodboard_analyze
+
+输入：image_paths: Vec<String>, provider_id: Option<String>
+输出：MoodboardResult { common_style: String, variations: String }
+左导航底部扩展工具区（3 个图标）：
+
+
+🔧 Prompt Generator
+🔍 Image Analyzer
+🎨 Moodboard
+实现顺序
+CSS — 更新 .app-shell grid，添加候选区、气泡样式
+uiStore — 替换 view 为 rightPanel + activeOverlay，添加 overlay 状态
+App.tsx — 新三栏布局骨架
+LeftNav — 项目/Prompt 树，底部扩展工具区（3 个图标）
+RightActivityBar + RightPanel — 图标栏 + 4 个面板
+CenterEditor — 编辑器 + 候选区 + Modifier 气泡
+SnippetsPanel — Slash command 集成
+AI Settings Overlay — 3 步引导式（Provider → Key → Model picker）
+Rust: ai_provider_fetch_models — 各 provider 的模型列表拉取
+Prompt Generator Overlay — 适配现有 PromptGeneratorPanel
+Rust: image_analyze — VLM 多维度图片分析命令
+Image Analyzer Overlay — 拖拽图片 → 分析 → 勾选维度 → 插入/保存
+Rust: moodboard_analyze — 多图共性提炼命令
+Moodboard Overlay — 多图上传 → 分析 → 输出为后缀/Snippet
+不变的内容
+后端 Rust 代码：所有命令不需要改动
+src/lib/tauri.ts：命令 wrapper 全部复用
+src/types/domain.ts：类型定义全部复用
+@monaco-editor/react 已安装，无需新增依赖
+验证方式
+npx tsc --noEmit — 0 errors
+npx vite build — build 成功
+cargo check — 0 errors
+手动测试：
+左导航切换 Prompt → 编辑器内容更新
+选中文字 → 气泡出现 → 填 instruction → 候选展开 → Apply 替换选区
+右侧图标 → 面板切换 → Snippets 里点 Insert → 插入编辑器
+Editor 里输入 / → Snippet picker 出现

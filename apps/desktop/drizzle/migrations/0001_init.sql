@@ -1,0 +1,2 @@
+-- Runtime migrations are executed from src-tauri/migrations/0001_init.sql.
+-- This file mirrors the first schema baseline for Drizzle tracking.

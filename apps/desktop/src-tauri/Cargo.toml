@@ -1,0 +1,42 @@
+[package]
+name = "prompt_toolkit"
+version = "0.1.0"
+description = "Prompt Toolkit Desktop"
+authors = ["Prompt Toolkit"]
+edition = "2021"
+
+[package.metadata.winres]
+FileDescription = "Prompt Toolkit Desktop"
+OriginalFilename = "PromptToolkit.exe"
+LegalCopyright = "MIT"
+
+[lib]
+name = "prompt_toolkit_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.0.1", features = [] }
+
+[dependencies]
+tauri = { version = "2.3.1", features = ["protocol-asset"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rusqlite = { version = "0.33.0", features = ["bundled", "chrono"] }
+chrono = { version = "0.4.40", features = ["serde"] }
+uuid = { version = "1.16.0", features = ["v4", "serde"] }
+thiserror = "2.0.12"
+sha2 = "0.10.8"
+base64 = "0.22.1"
+arboard = "3.4.1"
+reqwest = { version = "0.12.14", default-features = false, features = ["rustls-tls", "json"] }
+keyring = { version = "3.6.2", features = ["windows-native"] }
+tokio = { version = "1.44.1", features = ["rt", "macros"] }
+similar = "2.7.0"
+tauri-plugin-dialog = "2"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
+
+[dev-dependencies]
+httpmock = "0.8.2"

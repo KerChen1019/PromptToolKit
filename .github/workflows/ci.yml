@@ -1,0 +1,27 @@
+name: ci
+
+on:
+  push:
+    branches: ["main", "master"]
+  pull_request:
+
+jobs:
+  desktop:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Enable corepack
+        run: corepack enable
+      - name: Install dependencies
+        run: corepack pnpm install --filter @prompt-toolkit/desktop...
+      - name: Frontend type check
+        run: corepack pnpm --filter @prompt-toolkit/desktop lint
+      - name: Frontend build
+        run: corepack pnpm --filter @prompt-toolkit/desktop build
+      - name: Rust check
+        run: cargo check
+        working-directory: apps/desktop/src-tauri

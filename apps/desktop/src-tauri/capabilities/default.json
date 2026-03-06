@@ -1,0 +1,15 @@
+{
+  "$schema": "https://schema.tauri.app/config/2/capability",
+  "identifier": "default",
+  "description": "Default capabilities for Prompt Toolkit",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:image:default",
+    "core:path:default",
+    "core:window:default",
+    "dialog:allow-open",
+    "dialog:allow-save",
+    "dialog:allow-message"
+  ]
+}

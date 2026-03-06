@@ -1,0 +1,36 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Prompt Toolkit",
+  "version": "0.1.0",
+  "identifier": "com.prompttoolkit.desktop",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:1420",
+    "beforeDevCommand": "corepack pnpm dev",
+    "beforeBuildCommand": "corepack pnpm build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Prompt Toolkit",
+        "width": 1400,
+        "height": 920,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": null,
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["**"]
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/icon.ico"
+    ]
+  }
+}

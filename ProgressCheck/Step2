@@ -1,0 +1,84 @@
+Implemented. The plan is now wired end-to-end for AI prompt generation/rewrite testing.
+
+What was added
+
+New DB migration for AI runs + app settings: 0002_ai_runs.sql.
+AI provider call layer (4 paths) + prompt builders/parsers:
+ai/client.rs
+ai/prompts.rs
+providers/openai_compatible.rs
+providers/openai.rs
+providers/anthropic.rs
+providers/gemini.rs
+New backend commands:
+prompt_generate_from_brief and prompt_rewrite_candidates in commands/prompt.rs
+ai_run_history_list in commands/ai_run.rs
+ai_default_provider_get/set in commands/ai_provider.rs
+AI run persistence + default provider settings:
+repo/ai_run_repo.rs
+repo/ai_repo.rs
+Runtime wiring updates:
+src-tauri/src/lib.rs
+src-tauri/src/db/mod.rs
+Frontend API/types/UI updates:
+src/lib/tauri.ts
+src/types/domain.ts
+src/pages/EditorWorkspace.tsx
+src/pages/AISettingsPanel.tsx
+Mock integration test dependency and docs updates:
+Cargo.toml
+README.md
+Behavior now
+
+Editor has AI toolbar:
+Brief -> Generate
+Instruction + Preserve Voice -> Rewrite (3 candidates)
+Provider override dropdown (default provider fallback)
+Rewrite returns 3 candidates with unified diff and manual “Apply to Editor”.
+Each generate/rewrite call is persisted to ai_runs with status/latency/error.
+AISettings supports setting/clearing default provider.
+AI run history is displayed in Editor.
+Validation run
+
+corepack pnpm --filter @prompt-toolkit/desktop lint passed.
+corepack pnpm --filter @prompt-toolkit/desktop build passed.
+cargo check --manifest-path apps/desktop/src-tauri/Cargo.toml passed.
+cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml passed (14 tests, including HTTP mock integration for OpenAI-compatible/Anthropic/Gemini).
+Quick test path
+
+Open AISettingsPanel, add provider, click Set Default, then Test.
+Go to EditorWorkspace, select project/prompt, input brief, click Generate.
+Input rewrite instruction, click Rewrite (3 candidates), review diffs, apply one candidate.
+Confirm new entries appear under AI Run History.
+
+25 files changed
++1370
+-9
+Undo
+
+Review
+README.md
+apps/desktop/src-tauri/Cargo.toml
+apps/desktop/src-tauri/migrations/0002_ai_runs.sql
+apps/desktop/src-tauri/src/ai/client.rs
+apps/desktop/src-tauri/src/ai/mod.rs
+apps/desktop/src-tauri/src/ai/prompts.rs
+apps/desktop/src-tauri/src/ai/providers/anthropic.rs
+apps/desktop/src-tauri/src/ai/providers/gemini.rs
+apps/desktop/src-tauri/src/ai/providers/mod.rs
+apps/desktop/src-tauri/src/ai/providers/openai.rs
+apps/desktop/src-tauri/src/ai/providers/openai_compatible.rs
+apps/desktop/src-tauri/src/commands/ai_provider.rs
+apps/desktop/src-tauri/src/commands/ai_run.rs
+apps/desktop/src-tauri/src/commands/mod.rs
+apps/desktop/src-tauri/src/commands/prompt.rs
+apps/desktop/src-tauri/src/db/mod.rs
+apps/desktop/src-tauri/src/lib.rs
+apps/desktop/src-tauri/src/models.rs
+apps/desktop/src-tauri/src/repo/ai_repo.rs
+apps/desktop/src-tauri/src/repo/ai_run_repo.rs
+apps/desktop/src-tauri/src/repo/mod.rs
+apps/desktop/src/lib/tauri.ts
+apps/desktop/src/pages/AISettingsPanel.tsx
+apps/desktop/src/pages/EditorWorkspace.tsx
+apps/desktop/src/types/domain.ts

@@ -1,0 +1,60 @@
+Implemented a full Phase-1 baseline codebase in this repo with Tauri + React + TypeScript + SQLite and the required command surface.
+
+What I built
+
+Workspace + app scaffold:
+package.json
+pnpm-workspace.yaml
+apps/desktop/package.json
+apps/desktop/src-tauri/Cargo.toml
+apps/desktop/src-tauri/tauri.conf.json
+Frontend baseline with all requested panels:
+apps/desktop/src/App.tsx
+apps/desktop/src/pages/EditorWorkspace.tsx
+apps/desktop/src/pages/VersionHistoryPanel.tsx
+apps/desktop/src/pages/DiffPanel.tsx
+apps/desktop/src/pages/SnippetLibraryPanel.tsx
+apps/desktop/src/pages/ReferenceManagerPanel.tsx
+apps/desktop/src/pages/OutputInboxPanel.tsx
+apps/desktop/src/pages/AISettingsPanel.tsx
+Typed frontend domain + Tauri invoke API wrappers:
+apps/desktop/src/types/domain.ts
+apps/desktop/src/lib/tauri.ts
+Rust backend modules and command handlers:
+apps/desktop/src-tauri/src/lib.rs
+apps/desktop/src-tauri/src/db/mod.rs
+apps/desktop/src-tauri/src/commands/project.rs
+apps/desktop/src-tauri/src/commands/prompt.rs
+apps/desktop/src-tauri/src/commands/snippet.rs
+apps/desktop/src-tauri/src/commands/reference.rs
+apps/desktop/src-tauri/src/commands/clipboard_cmd.rs
+apps/desktop/src-tauri/src/commands/output.rs
+apps/desktop/src-tauri/src/commands/ai_provider.rs
+apps/desktop/src-tauri/src/clipboard.rs
+apps/desktop/src-tauri/src/attribution.rs
+DB schema + migration baseline (14 tables):
+apps/desktop/src-tauri/migrations/0001_init.sql
+Drizzle schema/migration tracking files:
+apps/desktop/drizzle/schema.ts
+apps/desktop/drizzle.config.ts
+CI baseline + exFAT pnpm fix:
+.github/workflows/ci.yml
+.npmrc
+Implemented behavior highlights
+
+Hidden zero-width payload copy is implemented and persisted to copy_events.
+Pasteback auto-attribution ranks top-3 by payload-first, then recent copy_events within 30 minutes.
+Snippet merge preview follows prefix -> free -> editor -> suffix.
+AI provider config supports openai_compatible/openai/anthropic/gemini, stores secrets in Windows Credential Manager.
+Validation I ran
+
+corepack pnpm --filter @prompt-toolkit/desktop lint passed.
+corepack pnpm --filter @prompt-toolkit/desktop build passed (Vite production build succeeded).
+Rust compile check could not run because cargo/rustc are not installed in this environment.
+Important note
+
+Tauri command names are implemented in snake_case (e.g. project_create), and mapped in frontend wrappers under dot-style groups (project.create, etc.) to match your API intent.
+Natural next steps:
+
+Install Rust toolchain, then run corepack pnpm --filter @prompt-toolkit/desktop tauri:dev.
+I can continue immediately with Week 2 hardening: full Rust unit/integration tests + DB backup/restore commands + stricter attribution scoring metrics.

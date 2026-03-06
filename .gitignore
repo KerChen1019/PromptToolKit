@@ -1,0 +1,12 @@
+node_modules/
+dist/
+target/
+pnpm-lock.yaml
+.DS_Store
+*.log
+apps/desktop/src-tauri/gen/
+apps/desktop/src-tauri/target/
+apps/desktop/src-tauri/.cargo/
+apps/desktop/.vite/
+apps/desktop/coverage/
+Prompt_Toolkit_产品策划书_V6.txt
