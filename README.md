@@ -8,29 +8,40 @@ A desktop app for AI artists to write, organize, version, and reuse prompts — 
 
 ## What Is This?
 
-Prompt Toolkit is a dedicated workspace for your AI image prompts. It sits between you and whatever model you're using — Midjourney, Flux, Stable Diffusion, DALL·E, Runway, and so on. You write and manage prompts here, then copy them out when you're ready to generate.
+Most AI image platforms — Midjourney, Leonardo, Comfy, SD frontends — give you a text input and a generation history. A few now include prompt suggestion tools or AI-assisted fill. None of them treat your prompts as something worth managing long-term.
 
-It does not generate images itself. What it does:
+Prompt Toolkit is a standalone desktop app that fills that gap. It's a dedicated prompt workspace: version control for every prompt you write, a reusable fragment library organized by creative category, output attribution that links your generated images back to the exact text that produced them, and AI tools for generating and refining prompts from scratch.
 
-- Saves every version of every prompt so you never lose the one that worked
-- Lets you build a library of reusable prompt fragments and drag them in anywhere
-- Attributes generated images back to the specific prompt that produced them
-- Analyzes images with AI to extract the style and technique so you can recreate it
+Because it's separate from any specific platform, your library works everywhere. You write here, copy out, generate on whichever tool you're using today.
 
-All your data lives on your own computer in a local database. No account required.
+All data is local — SQLite on your machine. No account, no subscription, no platform lock-in.
 
 ---
 
 ## The Problem It Solves
 
-If you generate more than a handful of images per week, you've probably felt this:
+**AI image platforms manage generations. Nobody manages prompts.**
 
-- You had a prompt that produced a great result and can't find it anymore
-- You can't tell what changed between the version that worked and the one that didn't
-- You write the same lighting and camera phrases over and over for every project
-- When an image comes out exactly right, you're not sure which specific prompt text made it happen
+Midjourney keeps a feed of your outputs. Leonardo has a history panel. Some platforms now have prompt assistants that autocomplete or suggest terms. These solve the generation side of the workflow. They don't solve the prompt side.
 
-Prompt Toolkit is built to fix all of that.
+The questions that actually matter when you're doing serious creative work:
+
+- *What exact text produced that image three months ago?*
+- *I revised this prompt four times last week — which version actually worked better, and what changed?*
+- *I've written "cinematic lighting, shallow depth of field, 35mm film grain" in twenty different prompts across five different tools. Where's the best version of that phrase, and why am I retyping it from memory every time?*
+- *I'm starting a new character project with the same visual style as a previous one. How do I carry over what worked?*
+
+Generation history is not version control. A feed of outputs is not an organized library. Platform-specific prompt suggestions don't survive the moment you switch tools.
+
+The underlying problem: **prompt quality compounds over time — but only if you can learn from your history.** If your best work is buried in a Discord feed or spread across three platform dashboards, it's effectively lost. You rebuild from scratch on every project.
+
+Prompt Toolkit is built on a different assumption: your prompts are the creative asset. They deserve the same rigor as any other professional text you produce.
+
+- **Version history with diff** — every commit saved with a timestamp, every change visible line by line
+- **Snippet library** — tested phrases and blocks organized by scope and tag, searchable and insertable across all your projects
+- **Output attribution** — drop a generated image and the app finds which prompt version most likely produced it; confirm and it's permanently linked
+- **Image and moodboard analysis** — reverse-engineer any image into structured prompt components across camera, lighting, color, texture, and mood
+- **Model-agnostic** — the same library and workflow regardless of whether you're on Midjourney today, Flux tomorrow, or running local models
 
 ---
 
